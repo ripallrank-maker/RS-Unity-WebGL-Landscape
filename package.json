@@ -1,0 +1,21 @@
+{
+  "name": "com.rs.webgllandscape",
+  "version": "1.0.0",
+  "displayName": "RS WebGL Landscape",
+  "description": "Portrait/landscape orientation adapter for Unity WebGL and the Editor. Keeps a landscape-designed game playable in portrait browsers by rotating cameras and ScreenSpace-Overlay canvases, with automatic screen-size polling and a JS bridge for browser orientation events.",
+  "unity": "2021.3",
+  "keywords": [
+    "webgl",
+    "orientation",
+    "portrait",
+    "landscape",
+    "mobile",
+    "canvas"
+  ],
+  "author": {
+    "name": "RS"
+  },
+  "dependencies": {
+    "com.unity.ugui": "1.0.0"
+  }
+}
