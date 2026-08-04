@@ -252,6 +252,42 @@ public class WebGLOrientationAdapter : MonoBehaviour
     public bool IsPortrait => _isPortrait;
 
     /// <summary>
+    /// Registers a Canvas that was created/enabled after the initial baseline
+    /// capture (e.g. a popup instantiated at runtime by a popup manager) and,
+    /// if the app is currently in portrait, immediately applies the same
+    /// rotation-root/scaler treatment used for canvases captured at Start().
+    /// Safe to call multiple times for the same canvas (no-op once tracked).
+    /// World-Space canvases are ignored, matching AppendNewObjects().
+    /// </summary>
+    public void NotifyCanvasShown(Canvas canvas)
+    {
+        if (canvas == null) return;
+        if (canvas.renderMode == RenderMode.WorldSpace) return;
+        if (!_baselineCaptured) CaptureBaseline();
+
+        int index = _canvases.FindIndex(e => e.canvas == canvas);
+        if (index < 0)
+        {
+            var sc = canvas.GetComponent<CanvasScaler>();
+            var mode = sc != null ? sc.uiScaleMode : CanvasScaler.ScaleMode.ConstantPixelSize;
+            var res = sc != null ? sc.referenceResolution : Vector2.zero;
+
+            _canvases.Add(new CanvasEntry
+            {
+                canvas = canvas,
+                scaler = sc,
+                scaleMode = mode,
+                baseRefRes = res,
+                rotationRoot = null
+            });
+            index = _canvases.Count - 1;
+        }
+
+        if (_isPortrait)
+            ApplyPortraitToCanvas(index);
+    }
+
+    /// <summary>
     /// Converts a screen-space delta vector to the logical (landscape) coordinate space.
     /// In portrait mode the canvas root is rotated by <c>portraitRotationDeg</c>, so raw
     /// screen deltas have their axes swapped relative to the game content.
@@ -436,67 +472,85 @@ public class WebGLOrientationAdapter : MonoBehaviour
         // ── Canvases ──────────────────────────────────────────────────────────
         for (int i = _canvases.Count - 1; i >= 0; i--)
         {
-            var e = _canvases[i];
-
-            if (e.canvas == null)
+            if (_canvases[i].canvas == null)
             {
                 _canvases.RemoveAt(i);
                 continue;
             }
 
-            if (e.scaler != null &&
-                e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
-            {
-                e.scaler.referenceResolution =
-                    new Vector2(e.baseRefRes.y, e.baseRefRes.x);
-
-                e.scaler.matchWidthOrHeight = 0f;
-            }
-
-            // Both Screen-Space Overlay and Screen-Space Camera get the manual
-            // pivot: Unity does re-orient a Screen-Space Camera canvas's own
-            // RectTransform to align with its Render Camera (shown as "driven by
-            // Canvas" in the Inspector), but the rendered result still comes out
-            // screen-locked/unrotated on the final frame either way — same as
-            // Overlay — so it needs the exact same manual compensation.
-            if (e.rotationRoot != null)
-                continue;
-
-            Vector2 landscapeSize =
-                e.baseRefRes != Vector2.zero
-                    ? new Vector2(
-                        Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
-                        Mathf.Min(e.baseRefRes.x, e.baseRefRes.y))
-                    : landscapeRef;
-
-            var rootGO = new GameObject("__PortraitRotationRoot__");
-            var rt = rootGO.AddComponent<RectTransform>();
-
-            rt.SetParent(e.canvas.transform, false);
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = landscapeSize;
-            rt.localScale = Vector3.one;
-            rt.localRotation = Quaternion.Euler(0f, 0f, portraitRotationDeg);
-
-            var children = new List<Transform>();
-
-            foreach (Transform child in e.canvas.transform)
-            {
-                if (child != rt)
-                    children.Add(child);
-            }
-
-            foreach (var child in children)
-                child.SetParent(rt, false);
-
-            e.rotationRoot = rootGO;
-            _canvases[i] = e;
+            ApplyPortraitToCanvas(i);
         }
 
         Canvas.ForceUpdateCanvases();
+    }
+
+    /// <summary>
+    /// Applies the portrait scaler swap + rotation-root pivot to a single
+    /// tracked canvas by index. Extracted from ApplyPortrait() so newly
+    /// registered canvases (see NotifyCanvasShown) can be brought in line
+    /// with an already-portrait app without re-processing every canvas.
+    /// Idempotent: safe to call again on a canvas that already has its
+    /// rotation root (e.g. re-shown popup).
+    /// </summary>
+    void ApplyPortraitToCanvas(int i)
+    {
+        var e = _canvases[i];
+        if (e.canvas == null) return;
+
+        if (e.scaler != null &&
+            e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
+        {
+            e.scaler.referenceResolution =
+                new Vector2(e.baseRefRes.y, e.baseRefRes.x);
+
+            e.scaler.matchWidthOrHeight = 0f;
+        }
+
+        // Both Screen-Space Overlay and Screen-Space Camera get the manual
+        // pivot: Unity does re-orient a Screen-Space Camera canvas's own
+        // RectTransform to align with its Render Camera (shown as "driven by
+        // Canvas" in the Inspector), but the rendered result still comes out
+        // screen-locked/unrotated on the final frame either way — same as
+        // Overlay — so it needs the exact same manual compensation.
+        if (e.rotationRoot != null)
+        {
+            _canvases[i] = e;
+            return;
+        }
+
+        Vector2 landscapeRef = GetLandscapeRefRes();
+        Vector2 landscapeSize =
+            e.baseRefRes != Vector2.zero
+                ? new Vector2(
+                    Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
+                    Mathf.Min(e.baseRefRes.x, e.baseRefRes.y))
+                : landscapeRef;
+
+        var rootGO = new GameObject("__PortraitRotationRoot__");
+        var rt = rootGO.AddComponent<RectTransform>();
+
+        rt.SetParent(e.canvas.transform, false);
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = landscapeSize;
+        rt.localScale = Vector3.one;
+        rt.localRotation = Quaternion.Euler(0f, 0f, portraitRotationDeg);
+
+        var children = new List<Transform>();
+
+        foreach (Transform child in e.canvas.transform)
+        {
+            if (child != rt)
+                children.Add(child);
+        }
+
+        foreach (var child in children)
+            child.SetParent(rt, false);
+
+        e.rotationRoot = rootGO;
+        _canvases[i] = e;
     }
 
     static void UnparentRotationRoot(Canvas canvas, GameObject rotationRoot)
