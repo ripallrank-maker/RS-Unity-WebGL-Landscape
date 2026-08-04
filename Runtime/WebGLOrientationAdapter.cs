@@ -648,7 +648,15 @@ public class WebGLOrientationAdapter : MonoBehaviour
     /// world-space camera-bound clamp rect (minX/maxX/minY/maxY) by, so
     /// non-Canvas objects (world sprites, gameplay bound clamps in
     /// CameraFollow2D/2DPvP) also respect the safe area. Returns all zeros
-    /// (no-op) when applySafeAreaToWorld is off or cam is null.
+    /// (no-op) when applySafeAreaToWorld is off.
+    ///
+    /// <paramref name="camVerticalSize"/> is the world half-height the caller
+    /// is ALREADY using for its own bound-clamp extent (orthographicSize, the
+    /// Cinemachine vcam's m_Lens.OrthographicSize, or the perspective
+    /// heightAtDistance/2 projection) — reuse it here instead of reading
+    /// cam.orthographicSize directly, since that can be stale (Cinemachine
+    /// Brain hasn't copied the vcam's lens into the real Camera yet this
+    /// frame) or simply wrong for a perspective camera.
     ///
     /// Portrait handling: this adapter rotates the camera -90°/+90° about Z to
     /// simulate landscape, which swaps which physical screen axis maps to
@@ -657,10 +665,10 @@ public class WebGLOrientationAdapter : MonoBehaviour
     /// top/bottom (Screen.height axis) maps to world X, physical left/right
     /// (Screen.width axis) maps to world Y.
     /// </summary>
-    public void GetSafeAreaWorldInsets(Camera cam, out float insetMinX, out float insetMaxX, out float insetMinY, out float insetMaxY)
+    public void GetSafeAreaWorldInsets(float camVerticalSize, out float insetMinX, out float insetMaxX, out float insetMinY, out float insetMaxY)
     {
         insetMinX = insetMaxX = insetMinY = insetMaxY = 0f;
-        if (!applySafeAreaToWorld || cam == null || !cam.orthographic) return;
+        if (!applySafeAreaToWorld) return;
         if (Screen.height <= 0) return;
 
         Rect safe = Screen.safeArea;
@@ -670,8 +678,8 @@ public class WebGLOrientationAdapter : MonoBehaviour
         float insetTopPx = Screen.height - safe.yMax;
 
         // World units per physical screen pixel — identical along both screen
-        // axes for an orthographic camera (no stretch), so one scalar covers both.
-        float worldPerPx = (2f * cam.orthographicSize) / Screen.height;
+        // axes (no stretch), so one scalar covers both.
+        float worldPerPx = (2f * camVerticalSize) / Screen.height;
 
         if (_isPortrait)
         {
