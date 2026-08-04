@@ -44,6 +44,17 @@ public class WebGLOrientationAdapter : MonoBehaviour
              "Turn on to diagnose letterbox / scale issues, then paste the log.")]
     [SerializeField] private bool debugLog = false;
 
+    [Header("Safe Area")]
+    [Tooltip("Co mọi Canvas Screen-Space (Overlay/Camera) vào Screen.safeArea bằng một " +
+             "\"__SafeAreaRoot__\" wrapper, tránh notch/status-bar/home-indicator che UI. " +
+             "Áp dụng độc lập với portrait/landscape.")]
+    [SerializeField] private bool applySafeAreaToCanvas = false;
+
+    [Tooltip("Cho phép GetSafeAreaWorldInsets() trả về giá trị khác 0, để các script điều " +
+             "khiển camera world-space (vd CameraFollow2D/2DPvP) tự co bound clamp theo " +
+             "Screen.safeArea. Không tự động làm gì nếu không có script nào gọi hàm này.")]
+    [SerializeField] private bool applySafeAreaToWorld = false;
+
     // ── JSLib bridge — orientation detection only ─────────────────────────────
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] static extern void WebGLOriBridge_Init(string goName);
@@ -79,13 +90,30 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
     private readonly List<CameraEntry> _cameras = new List<CameraEntry>();
     private readonly List<CanvasEntry> _canvases = new List<CanvasEntry>();
+#if RS_LANDSCAPE_CINEMACHINE
+    private readonly List<VirtualCameraEntry> _vcams = new List<VirtualCameraEntry>();
+#endif
 
     struct CameraEntry
     {
         public Camera cam;
         public Quaternion baseRotation;
         public float baseOrthographicSize;
+        // True when a CinemachineBrain drives this camera's transform/lens every
+        // LateUpdate from a CinemachineVirtualCamera — direct writes here would be
+        // overwritten the same frame, so rotation/orthoSize go to the vcam instead
+        // (see VirtualCameraEntry / the _vcams loop in ApplyPortrait/ResetToBaseline).
+        public bool driveByCinemachine;
     }
+
+#if RS_LANDSCAPE_CINEMACHINE
+    struct VirtualCameraEntry
+    {
+        public Cinemachine.CinemachineVirtualCamera vcam;
+        public Quaternion baseRotation;
+        public float baseOrthographicSize;
+    }
+#endif
 
     struct CanvasEntry
     {
@@ -94,6 +122,11 @@ public class WebGLOrientationAdapter : MonoBehaviour
         public Vector2 baseRefRes;
         public CanvasScaler.ScaleMode scaleMode;
         public GameObject rotationRoot;
+        // Outermost wrapper (direct child of canvas) inset to Screen.safeArea via
+        // offsetMin/offsetMax. rotationRoot (or, in landscape, the original
+        // children) is parented INSIDE this instead of directly under canvas, so
+        // the safe area applies regardless of portrait/landscape state.
+        public GameObject safeAreaRoot;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -150,7 +183,15 @@ public class WebGLOrientationAdapter : MonoBehaviour
             _isPortrait = nowPortrait;
             ApplyCurrent();
         }
-        // (portrait with same size — no camera adjustments needed)
+        else if (applySafeAreaToCanvas)
+        {
+            // Same portrait/landscape state, but Screen.safeArea can still
+            // change independently (e.g. rotating between landscape-left and
+            // landscape-right swaps which side the notch is on) — refresh the
+            // safe-area insets without a full rotation reset/apply.
+            for (int i = 0; i < _canvases.Count; i++)
+                UpdateSafeAreaRoot(i);
+        }
 
         _lastW = newW;
         _lastH = newH;
@@ -283,6 +324,8 @@ public class WebGLOrientationAdapter : MonoBehaviour
             index = _canvases.Count - 1;
         }
 
+        UpdateSafeAreaRoot(index);
+
         if (_isPortrait)
             ApplyPortraitToCanvas(index);
     }
@@ -324,6 +367,9 @@ public class WebGLOrientationAdapter : MonoBehaviour
     {
         _cameras.Clear();
         _canvases.Clear();
+#if RS_LANDSCAPE_CINEMACHINE
+        _vcams.Clear();
+#endif
         AppendNewObjects();
         if (worldRoot != null)
             _worldRootBaseRot = worldRoot.rotation;
@@ -340,9 +386,28 @@ public class WebGLOrientationAdapter : MonoBehaviour
             {
                 cam = cam,
                 baseRotation = cam.transform.rotation,
-                baseOrthographicSize = cam.orthographicSize
+                baseOrthographicSize = cam.orthographicSize,
+#if RS_LANDSCAPE_CINEMACHINE
+                driveByCinemachine = cam.GetComponent<Cinemachine.CinemachineBrain>() != null
+#else
+                driveByCinemachine = false
+#endif
             });
         }
+
+#if RS_LANDSCAPE_CINEMACHINE
+        foreach (var vcam in Object.FindObjectsOfType<Cinemachine.CinemachineVirtualCamera>(true))
+        {
+            if (vcam == null) continue;
+            if (_vcams.Exists(e => e.vcam == vcam)) continue;
+            _vcams.Add(new VirtualCameraEntry
+            {
+                vcam = vcam,
+                baseRotation = vcam.transform.localRotation,
+                baseOrthographicSize = vcam.m_Lens.OrthographicSize
+            });
+        }
+#endif
 
         foreach (var cv in Object.FindObjectsOfType<Canvas>(true))
         {
@@ -429,15 +494,26 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 continue;
             }
 
-            // Camera xoay ngược chiều canvas/root để giả lập landscape.
-            e.cam.transform.rotation =
-                e.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
-
             // Xóa mọi aspect bị ép cứng bằng tay (vd game gọi
             // Camera.main.aspect = 800/480f) — nếu không, camera render theo
             // tỉ lệ landscape cố định và để lại thanh đen/letterbox trên màn
             // portrait. ResetAspect() trả camera về tỉ lệ thật của viewport.
+            // Aspect luôn reset ở đây kể cả khi CinemachineBrain điều khiển camera —
+            // Brain không ghi đè aspect, chỉ ghi đè rotation/lens từ vcam mỗi LateUpdate.
             e.cam.ResetAspect();
+
+            if (e.driveByCinemachine)
+            {
+                // CinemachineBrain sẽ ghi đè transform.rotation + orthographicSize của
+                // camera này từ CinemachineVirtualCamera ngay LateUpdate kế tiếp, nên set
+                // trực tiếp ở đây vô nghĩa — rotation/orthoSize được áp lên vcam bên dưới
+                // (xem vòng lặp _vcams) để Brain tự copy sang camera thật.
+                continue;
+            }
+
+            // Camera xoay ngược chiều canvas/root để giả lập landscape.
+            e.cam.transform.rotation =
+                e.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
 
             if (e.cam.orthographic)
             {
@@ -469,6 +545,37 @@ public class WebGLOrientationAdapter : MonoBehaviour
             }
         }
 
+#if RS_LANDSCAPE_CINEMACHINE
+        // ── Cinemachine virtual cameras ───────────────────────────────────────
+        // Rotate/rescale the vcam instead of the Brain-driven Camera above: the
+        // Brain copies the vcam's transform + m_Lens into the real Camera every
+        // LateUpdate, so this is the only write that survives.
+        float vcamAspect = _cameras.Exists(c => c.driveByCinemachine)
+            ? _cameras.Find(c => c.driveByCinemachine).cam.aspect
+            : (float)Screen.width / Screen.height;
+
+        for (int i = _vcams.Count - 1; i >= 0; i--)
+        {
+            var v = _vcams[i];
+            if (v.vcam == null)
+            {
+                _vcams.RemoveAt(i);
+                continue;
+            }
+
+            v.vcam.transform.localRotation =
+                v.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
+
+            var lens = v.vcam.m_Lens;
+            lens.OrthographicSize = v.baseOrthographicSize / vcamAspect;
+            v.vcam.m_Lens = lens;
+
+            if (debugLog)
+                Debug.Log($"[RSWebGLLandscape] vcam '{v.vcam.name}' baseOrtho={v.baseOrthographicSize:F3} " +
+                          $"aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3}");
+        }
+#endif
+
         // ── Canvases ──────────────────────────────────────────────────────────
         for (int i = _canvases.Count - 1; i >= 0; i--)
         {
@@ -478,10 +585,108 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 continue;
             }
 
+            UpdateSafeAreaRoot(i);
             ApplyPortraitToCanvas(i);
         }
 
         Canvas.ForceUpdateCanvases();
+    }
+
+    /// <summary>
+    /// Creates (once) or refreshes the "__SafeAreaRoot__" wrapper for a tracked
+    /// canvas: a full-stretch RectTransform inset to Screen.safeArea via
+    /// offsetMin/offsetMax (converted from screen pixels to canvas-local units
+    /// through canvas.scaleFactor, so it's correct under any CanvasScaler mode).
+    /// No-op if applySafeAreaToCanvas is off. Safe to call every frame the
+    /// screen size / safe area may have changed (e.g. rotation, notch cutout
+    /// toggling) — cheap RectTransform field writes only.
+    /// </summary>
+    void UpdateSafeAreaRoot(int i)
+    {
+        if (!applySafeAreaToCanvas) return;
+
+        var e = _canvases[i];
+        if (e.canvas == null) return;
+
+        RectTransform rt;
+        if (e.safeAreaRoot == null)
+        {
+            var go = new GameObject("__SafeAreaRoot__");
+            rt = go.AddComponent<RectTransform>();
+            rt.SetParent(e.canvas.transform, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.localScale = Vector3.one;
+
+            // Move whatever is currently a direct child of the canvas (original
+            // UI content, or an already-existing rotationRoot) inside the wrapper
+            // so the safe-area inset applies to everything uniformly.
+            var existing = new List<Transform>();
+            foreach (Transform child in e.canvas.transform)
+                if (child != rt) existing.Add(child);
+            foreach (var child in existing)
+                child.SetParent(rt, false);
+
+            e.safeAreaRoot = go;
+            _canvases[i] = e;
+        }
+        else
+        {
+            rt = e.safeAreaRoot.GetComponent<RectTransform>();
+        }
+
+        Rect safe = Screen.safeArea;
+        float scale = e.canvas.scaleFactor > 0f ? e.canvas.scaleFactor : 1f;
+
+        rt.offsetMin = new Vector2(safe.xMin / scale, safe.yMin / scale);
+        rt.offsetMax = new Vector2((safe.xMax - Screen.width) / scale, (safe.yMax - Screen.height) / scale);
+    }
+
+    /// <summary>
+    /// Converts Screen.safeArea into world-space inset amounts to shrink a
+    /// world-space camera-bound clamp rect (minX/maxX/minY/maxY) by, so
+    /// non-Canvas objects (world sprites, gameplay bound clamps in
+    /// CameraFollow2D/2DPvP) also respect the safe area. Returns all zeros
+    /// (no-op) when applySafeAreaToWorld is off or cam is null.
+    ///
+    /// Portrait handling: this adapter rotates the camera -90°/+90° about Z to
+    /// simulate landscape, which swaps which physical screen axis maps to
+    /// which world axis (same swap already applied to camHorizontalSize/
+    /// camVerticalSize in CameraFollow2D/2DPvP's bound-clamp code) — physical
+    /// top/bottom (Screen.height axis) maps to world X, physical left/right
+    /// (Screen.width axis) maps to world Y.
+    /// </summary>
+    public void GetSafeAreaWorldInsets(Camera cam, out float insetMinX, out float insetMaxX, out float insetMinY, out float insetMaxY)
+    {
+        insetMinX = insetMaxX = insetMinY = insetMaxY = 0f;
+        if (!applySafeAreaToWorld || cam == null || !cam.orthographic) return;
+        if (Screen.height <= 0) return;
+
+        Rect safe = Screen.safeArea;
+        float insetLeftPx = safe.xMin;
+        float insetRightPx = Screen.width - safe.xMax;
+        float insetBottomPx = safe.yMin;
+        float insetTopPx = Screen.height - safe.yMax;
+
+        // World units per physical screen pixel — identical along both screen
+        // axes for an orthographic camera (no stretch), so one scalar covers both.
+        float worldPerPx = (2f * cam.orthographicSize) / Screen.height;
+
+        if (_isPortrait)
+        {
+            insetMinX = insetTopPx * worldPerPx;
+            insetMaxX = insetBottomPx * worldPerPx;
+            insetMinY = insetLeftPx * worldPerPx;
+            insetMaxY = insetRightPx * worldPerPx;
+        }
+        else
+        {
+            insetMinX = insetLeftPx * worldPerPx;
+            insetMaxX = insetRightPx * worldPerPx;
+            insetMinY = insetBottomPx * worldPerPx;
+            insetMaxY = insetTopPx * worldPerPx;
+        }
     }
 
     /// <summary>
@@ -526,10 +731,16 @@ public class WebGLOrientationAdapter : MonoBehaviour
                     Mathf.Min(e.baseRefRes.x, e.baseRefRes.y))
                 : landscapeRef;
 
+        // When applySafeAreaToCanvas is on, the rotation root is parented
+        // INSIDE the safe-area wrapper (not directly under the canvas) so its
+        // center pivot sits at the safe-area's center rather than the full
+        // screen's center.
+        Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
+
         var rootGO = new GameObject("__PortraitRotationRoot__");
         var rt = rootGO.AddComponent<RectTransform>();
 
-        rt.SetParent(e.canvas.transform, false);
+        rt.SetParent(container, false);
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
@@ -540,7 +751,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
         var children = new List<Transform>();
 
-        foreach (Transform child in e.canvas.transform)
+        foreach (Transform child in container)
         {
             if (child != rt)
                 children.Add(child);
@@ -553,13 +764,13 @@ public class WebGLOrientationAdapter : MonoBehaviour
         _canvases[i] = e;
     }
 
-    static void UnparentRotationRoot(Canvas canvas, GameObject rotationRoot)
+    static void UnparentRotationRoot(Transform container, GameObject rotationRoot)
     {
         var children = new List<Transform>();
         foreach (Transform child in rotationRoot.transform)
             children.Add(child);
         foreach (var child in children)
-            child.SetParent(canvas.transform, false);
+            child.SetParent(container, false);
 
         Object.Destroy(rotationRoot);
     }
@@ -575,11 +786,27 @@ public class WebGLOrientationAdapter : MonoBehaviour
         {
             var e = _cameras[i];
             if (e.cam == null) { _cameras.RemoveAt(i); continue; }
-            e.cam.transform.rotation = e.baseRotation;
             e.cam.ResetAspect();
+
+            if (e.driveByCinemachine) continue; // handled via the vcam loop below
+
+            e.cam.transform.rotation = e.baseRotation;
             if (e.cam.orthographic)
                 e.cam.orthographicSize = e.baseOrthographicSize;
         }
+
+#if RS_LANDSCAPE_CINEMACHINE
+        for (int i = _vcams.Count - 1; i >= 0; i--)
+        {
+            var v = _vcams[i];
+            if (v.vcam == null) { _vcams.RemoveAt(i); continue; }
+
+            v.vcam.transform.localRotation = v.baseRotation;
+            var lens = v.vcam.m_Lens;
+            lens.OrthographicSize = v.baseOrthographicSize;
+            v.vcam.m_Lens = lens;
+        }
+#endif
 
         // ── Canvases ──────────────────────────────────────────────────────────
         for (int i = _canvases.Count - 1; i >= 0; i--)
@@ -587,9 +814,13 @@ public class WebGLOrientationAdapter : MonoBehaviour
             var e = _canvases[i];
             if (e.canvas == null) { _canvases.RemoveAt(i); continue; }
 
+            UpdateSafeAreaRoot(i);
+            e = _canvases[i];
+
             if (e.rotationRoot != null)
             {
-                UnparentRotationRoot(e.canvas, e.rotationRoot);
+                Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
+                UnparentRotationRoot(container, e.rotationRoot);
                 e.rotationRoot = null;
                 _canvases[i] = e;
             }
