@@ -524,21 +524,16 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 // (khớp theo trục width vật lý — xem ApplyPortrait canvas loop bên dưới).
                 // Để world-space (bao gồm mọi collider/UI giả lập bằng world object,
                 // vd tutorial highlight) tiếp tục khớp pixel-perfect với Canvas đó,
-                // orthographicSize PHẢI theo đúng công thức tương đương: giữ cố định
-                // nửa-chiều-rộng thế giới (baseOrthographicSize * designAspect) và suy
-                // ra nửa-chiều-cao từ aspect thực tế — tức orthoSize = base / cam.aspect.
-                // (cam.aspect ở đây đã được ResetAspect() ở trên = Screen.width/Screen.height.)
+                // orthoSize suy ra trực tiếp từ aspect thực tế (KHÔNG nhân designAspect
+                // — đã verify bằng số đo thật: base=4 → ~7 ở aspect thiết kế (0.5625),
+                // ~8 ở màn dài nhất 2:1 (aspect=0.5); nhân thêm designAspect sẽ overshoot
+                // lên ~15, sai). cam.aspect ở đây đã được ResetAspect() ở trên =
+                // Screen.width/Screen.height.
                 //
                 // Lưu ý: dùng công thức "fill/fit" min/max cũ sẽ làm world-space bị lệch
                 // tỉ lệ so với Canvas → các collider tag "isTutorial" (StepTutorial.
                 // IsRightInputPos) đè sai vị trí lên nút UI khi ở portrait.
-                //
-                // Công thức trước đây thiếu nhân designAspect (chỉ có base/aspect),
-                // nên nửa-chiều-rộng thế giới thực tế trôi theo aspect thay vì cố
-                // định ở base*designAspect như comment mô tả — trên màn hình càng
-                // dài (aspect càng nhỏ) thì orthoSize càng hụt so với mức cần thiết,
-                // lộ viền/mất nội dung. Nhân thêm designAspect để khớp đúng ý đồ gốc.
-                e.cam.orthographicSize = e.baseOrthographicSize * designAspect / e.cam.aspect;
+                e.cam.orthographicSize = e.baseOrthographicSize / e.cam.aspect;
 
                 if (debugLog)
                     Debug.Log($"[RSWebGLLandscape] baseOrtho={e.baseOrthographicSize:F3} " +
@@ -576,12 +571,12 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 v.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
 
             var lens = v.vcam.Lens;
-            lens.OrthographicSize = v.baseOrthographicSize * designAspect / vcamAspect;
+            lens.OrthographicSize = v.baseOrthographicSize / vcamAspect;
             v.vcam.Lens = lens;
 
             if (debugLog)
                 Debug.Log($"[RSWebGLLandscape] vcam '{v.vcam.name}' baseOrtho={v.baseOrthographicSize:F3} " +
-                          $"designAspect={designAspect:F3} aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3}");
+                          $"aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3}");
         }
 #endif
 
