@@ -156,7 +156,41 @@ public class WebGLOrientationAdapter : MonoBehaviour
         yield return new WaitForEndOfFrame();
         Canvas.ForceUpdateCanvases();
         IsReady = true;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Some Android WebView engines briefly report a stale/incorrect
+        // window.innerWidth/innerHeight right after a Unity scene transition
+        // (their own layout/rotation-lock hasn't settled yet), which this
+        // adapter would otherwise bake in as the wrong baseline for the whole
+        // scene's lifetime — a plain resize event never follows because the
+        // WebView's viewport doesn't actually change size again afterward.
+        // Re-check shortly after and reapply if the first read turned out wrong.
+        yield return RecheckOrientationAfterSettle();
+#endif
     }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    IEnumerator RecheckOrientationAfterSettle()
+    {
+        yield return new WaitForSeconds(0.3f);
+        if (!_baselineCaptured) yield break;
+
+        bool actuallyPortrait = BridgeIsPortrait() == 1;
+        if (actuallyPortrait == _isPortrait) yield break;
+
+        if (debugLog)
+            Debug.LogWarning($"[RSWebGLLandscape] Settle-recheck disagreed with the initial read " +
+                              $"(initial isPortrait={_isPortrait}, now={actuallyPortrait}) — reapplying.");
+
+        ResetToBaseline();
+        _isPortrait = actuallyPortrait;
+        ApplyCurrent();
+        _lastW = Screen.width;
+        _lastH = Screen.height;
+        yield return new WaitForEndOfFrame();
+        Canvas.ForceUpdateCanvases();
+    }
+#endif
 
     /// <summary>
     /// Poll screen size every frame. Any change (resize, rotation, SetResolution)

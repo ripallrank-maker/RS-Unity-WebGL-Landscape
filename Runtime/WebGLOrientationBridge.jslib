@@ -5,9 +5,20 @@ mergeInto(LibraryManager.library, {
     // to the Unity GameObject via SendMessage.
     // No CSS or input manipulation — Unity handles rotation entirely on its own side.
     WebGLOriBridge_Init: function(gameObjectNamePtr) {
-        if (Module['WebGLOriBridge'] && Module['WebGLOriBridge'].initialized) return;
-
         var goName = UTF8ToString(gameObjectNamePtr);
+
+        // Each scene creates its own adapter GameObject/instance (scene-scoped,
+        // no DontDestroyOnLoad) and calls Init() again on scene load — if a prior
+        // scene's bridge is still marked initialized (e.g. its OnDestroy/Cleanup
+        // hasn't run yet when this fires), only refresh which GameObject future
+        // resize/orientationchange events target instead of skipping entirely,
+        // otherwise SendMessage keeps firing at the previous scene's (possibly
+        // gone) GameObject name and the new scene never hears about later
+        // rotations.
+        if (Module['WebGLOriBridge'] && Module['WebGLOriBridge'].initialized) {
+            Module['WebGLOriBridge'].goName = goName;
+            return;
+        }
 
         Module['WebGLOriBridge'] = {
             initialized: true,
