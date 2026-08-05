@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.UI;
 #if RS_LANDSCAPE_CINEMACHINE
-using Unity.Cinemachine;
+using Cinemachine;
 #endif
 
 /// <summary>
@@ -112,7 +112,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
 #if RS_LANDSCAPE_CINEMACHINE
     struct VirtualCameraEntry
     {
-        public CinemachineCamera vcam;
+        public CinemachineVirtualCamera vcam;
         public Quaternion baseRotation;
         public float baseOrthographicSize;
     }
@@ -399,7 +399,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
         }
 
 #if RS_LANDSCAPE_CINEMACHINE
-        foreach (var vcam in Object.FindObjectsOfType<CinemachineCamera>(true))
+        foreach (var vcam in Object.FindObjectsOfType<CinemachineVirtualCamera>(true))
         {
             if (vcam == null) continue;
             if (_vcams.Exists(e => e.vcam == vcam)) continue;
@@ -407,7 +407,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
             {
                 vcam = vcam,
                 baseRotation = vcam.transform.localRotation,
-                baseOrthographicSize = vcam.Lens.OrthographicSize
+                baseOrthographicSize = vcam.m_Lens.OrthographicSize
             });
         }
 #endif
@@ -570,9 +570,9 @@ public class WebGLOrientationAdapter : MonoBehaviour
             v.vcam.transform.localRotation =
                 v.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
 
-            var lens = v.vcam.Lens;
+            var lens = v.vcam.m_Lens;
             lens.OrthographicSize = v.baseOrthographicSize / vcamAspect;
-            v.vcam.Lens = lens;
+            v.vcam.m_Lens = lens;
 
             if (debugLog)
                 Debug.Log($"[RSWebGLLandscape] vcam '{v.vcam.name}' baseOrtho={v.baseOrthographicSize:F3} " +
@@ -814,9 +814,9 @@ public class WebGLOrientationAdapter : MonoBehaviour
             if (v.vcam == null) { _vcams.RemoveAt(i); continue; }
 
             v.vcam.transform.localRotation = v.baseRotation;
-            var lens = v.vcam.Lens;
+            var lens = v.vcam.m_Lens;
             lens.OrthographicSize = v.baseOrthographicSize;
-            v.vcam.Lens = lens;
+            v.vcam.m_Lens = lens;
         }
 #endif
 

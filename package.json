@@ -16,7 +16,6 @@
     "name": "RS"
   },
   "dependencies": {
-    "com.unity.ugui": "1.0.0",
-    "com.unity.cinemachine": "3.0.0"
+    "com.unity.ugui": "1.0.0"
   }
 }
