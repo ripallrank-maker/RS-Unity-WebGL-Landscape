@@ -138,7 +138,16 @@ public class WebGLOrientationAdapter : MonoBehaviour
         // Scene-scoped by design: NO DontDestroyOnLoad. Only the scene that
         // actually contains this component is rotated; the instance is destroyed
         // together with its scene, so scenes without the adapter are never touched.
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this)
+        {
+            if (debugLog)
+                Debug.LogWarning($"[RSWebGLLandscape] Awake on '{gameObject.name}' (scene={gameObject.scene.name}): " +
+                                  $"a prior Instance from scene '{Instance.gameObject.scene.name}' is still alive " +
+                                  "— destroying this new one instead of taking over. If that prior instance " +
+                                  "belongs to a scene that's supposed to be gone, this scene never gets its own adapter.");
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
     }
 
@@ -156,6 +165,10 @@ public class WebGLOrientationAdapter : MonoBehaviour
         yield return new WaitForEndOfFrame();
         Canvas.ForceUpdateCanvases();
         IsReady = true;
+
+        if (debugLog)
+            Debug.Log($"[RSWebGLLandscape] Start() on '{gameObject.name}' (scene={gameObject.scene.name}): " +
+                      $"{_lastW}x{_lastH} isPortrait={_isPortrait}");
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         // Some Android WebView engines briefly report a stale/incorrect
@@ -176,6 +189,11 @@ public class WebGLOrientationAdapter : MonoBehaviour
         if (!_baselineCaptured) yield break;
 
         bool actuallyPortrait = BridgeIsPortrait() == 1;
+
+        if (debugLog)
+            Debug.Log($"[RSWebGLLandscape] Settle-recheck on '{gameObject.name}': " +
+                      $"{Screen.width}x{Screen.height} isPortrait now={actuallyPortrait} (was {_isPortrait})");
+
         if (actuallyPortrait == _isPortrait) yield break;
 
         if (debugLog)
@@ -213,6 +231,10 @@ public class WebGLOrientationAdapter : MonoBehaviour
         int newH = Screen.height;
         bool nowPortrait = newH > newW;
 
+        if (debugLog)
+            Debug.Log($"[RSWebGLLandscape] OnScreenSizeChanged on '{gameObject.name}': " +
+                      $"{_lastW}x{_lastH} → {newW}x{newH}, wasPortrait={_isPortrait} nowPortrait={nowPortrait}");
+
         if (nowPortrait != _isPortrait)
         {
             // Orientation flipped — full reset then apply
@@ -239,6 +261,9 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
     void OnDestroy()
     {
+        if (debugLog)
+            Debug.Log($"[RSWebGLLandscape] OnDestroy on '{gameObject.name}' (scene={gameObject.scene.name}), " +
+                      $"isPortrait={_isPortrait}, isCurrentInstance={Instance == this}");
 #if UNITY_WEBGL && !UNITY_EDITOR
         WebGLOriBridge_Cleanup();
 #endif
