@@ -486,6 +486,16 @@ public class WebGLOrientationAdapter : MonoBehaviour
             ? landscapeRef.x / landscapeRef.y
             : 16f / 9f;
 
+        // Aspect an toàn tối thiểu = nghịch đảo designAspect (vd design 16:9 →
+        // 0.5625). Không cho phép cam.aspect thực tế (Screen.width/height) tụt
+        // dưới mức này: trên màn hình siêu dài (gần 2:1, aspect thực ~0.5) công
+        // thức orthoSize = base/aspect sẽ phình to không giới hạn, lộ ra phần
+        // world/canvas vượt quá vùng thiết kế mà background/UI không phủ tới →
+        // thấy trống/mất nội dung ở rìa trên-dưới. Clamp về đúng designAspect
+        // giữ orthoSize không bao giờ vượt quá base*designAspect (mức tối đa
+        // được thiết kế); phần dư ra ngoài sẽ hiện letterbox thay vì lộ nội dung.
+        float minSafeAspect = designAspect > 0f ? 1f / designAspect : 0f;
+
         // ── Cameras ───────────────────────────────────────────────────────────
         for (int i = _cameras.Count - 1; i >= 0; i--)
         {
@@ -532,12 +542,13 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 // Lưu ý: dùng công thức "fill/fit" min/max cũ sẽ làm world-space bị lệch
                 // tỉ lệ so với Canvas → các collider tag "isTutorial" (StepTutorial.
                 // IsRightInputPos) đè sai vị trí lên nút UI khi ở portrait.
-                e.cam.orthographicSize = e.baseOrthographicSize / e.cam.aspect;
+                float camAspect = Mathf.Max(e.cam.aspect, minSafeAspect);
+                e.cam.orthographicSize = e.baseOrthographicSize / camAspect;
 
                 if (debugLog)
                     Debug.Log($"[RSWebGLLandscape] baseOrtho={e.baseOrthographicSize:F3} " +
                               $"designAspect={designAspect:F3} camAspect={e.cam.aspect:F3} " +
-                              $"({Screen.width}x{Screen.height}) " +
+                              $"(clamped={camAspect:F3}) ({Screen.width}x{Screen.height}) " +
                               $"→ ortho={e.cam.orthographicSize:F3}");
             }
             else if (debugLog)
@@ -556,6 +567,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
         float vcamAspect = _cameras.Exists(c => c.driveByCinemachine)
             ? _cameras.Find(c => c.driveByCinemachine).cam.aspect
             : (float)Screen.width / Screen.height;
+        vcamAspect = Mathf.Max(vcamAspect, minSafeAspect);
 
         for (int i = _vcams.Count - 1; i >= 0; i--)
         {
