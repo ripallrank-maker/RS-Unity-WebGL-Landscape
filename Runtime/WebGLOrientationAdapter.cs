@@ -194,7 +194,21 @@ public class WebGLOrientationAdapter : MonoBehaviour
             Debug.Log($"[RSWebGLLandscape] Settle-recheck on '{gameObject.name}': " +
                       $"{Screen.width}x{Screen.height} isPortrait now={actuallyPortrait} (was {_isPortrait})");
 
-        if (actuallyPortrait == _isPortrait) yield break;
+        if (actuallyPortrait == _isPortrait)
+        {
+            // Orientation guess was right, but the viewport dimensions themselves
+            // may still have been wrong at the time canvases were first rotated
+            // (the whole reason this recheck exists) — refresh their rotation-root
+            // sizes against the now-settled Screen.width/height regardless.
+            if (_isPortrait)
+            {
+                for (int i = 0; i < _canvases.Count; i++)
+                    RefreshCanvasRotationSize(i);
+                yield return new WaitForEndOfFrame();
+                Canvas.ForceUpdateCanvases();
+            }
+            yield break;
+        }
 
         if (debugLog)
             Debug.LogWarning($"[RSWebGLLandscape] Settle-recheck disagreed with the initial read " +
@@ -242,14 +256,18 @@ public class WebGLOrientationAdapter : MonoBehaviour
             _isPortrait = nowPortrait;
             ApplyCurrent();
         }
-        else if (applySafeAreaToCanvas)
+        else if (_isPortrait)
         {
-            // Same portrait/landscape state, but Screen.safeArea can still
-            // change independently (e.g. rotating between landscape-left and
-            // landscape-right swaps which side the notch is on) — refresh the
-            // safe-area insets without a full rotation reset/apply.
+            // Same portrait/landscape state, but absolute dimensions still changed
+            // (e.g. a WebView's viewport settling to its real size after an initial
+            // stale read, or safeArea changing side when rotating landscape-left vs
+            // landscape-right) — refresh rotation-root sizes and safe-area insets
+            // without a full rotation reset/apply.
             for (int i = 0; i < _canvases.Count; i++)
-                UpdateSafeAreaRoot(i);
+            {
+                if (applySafeAreaToCanvas) UpdateSafeAreaRoot(i);
+                RefreshCanvasRotationSize(i);
+            }
         }
 
         _lastW = newW;
@@ -790,17 +808,9 @@ public class WebGLOrientationAdapter : MonoBehaviour
         // Overlay — so it needs the exact same manual compensation.
         if (e.rotationRoot != null)
         {
-            _canvases[i] = e;
+            RefreshCanvasRotationSize(i);
             return;
         }
-
-        Vector2 landscapeRef = GetLandscapeRefRes();
-        Vector2 landscapeSize =
-            e.baseRefRes != Vector2.zero
-                ? new Vector2(
-                    Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
-                    Mathf.Min(e.baseRefRes.x, e.baseRefRes.y))
-                : landscapeRef;
 
         // When applySafeAreaToCanvas is on, the rotation root is parented
         // INSIDE the safe-area wrapper (not directly under the canvas) so its
@@ -816,7 +826,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = landscapeSize;
         rt.localScale = Vector3.one;
         rt.localRotation = Quaternion.Euler(0f, 0f, portraitRotationDeg);
 
@@ -833,6 +842,54 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
         e.rotationRoot = rootGO;
         _canvases[i] = e;
+
+        // sizeDelta needs the container's rect, which is only correct AFTER the
+        // rotation root itself is parented in (containers using a layout group,
+        // content size fitter etc. could otherwise still report a stale rect) —
+        // compute it last.
+        RefreshCanvasRotationSize(i);
+    }
+
+    /// <summary>
+    /// Recomputes and applies the pre-rotation size of a tracked canvas'
+    /// "__PortraitRotationRoot__" so a 90° rotation maps its bounding box back
+    /// onto the container's exact current rect. Called every time this canvas is
+    /// (re)processed AND on every plain resize (see OnScreenSizeChanged /
+    /// RecheckOrientationAfterSettle) — a size captured only once would go stale
+    /// the moment the viewport size changes again, which WebView browsers do:
+    /// they can report a stale/incorrect window.innerWidth/innerHeight right
+    /// after load and only settle to the true size shortly after, and that later
+    /// correction never touches canvases when the portrait/landscape guess itself
+    /// didn't flip. No-op for ScaleWithScreenSize canvases — CanvasScaler already
+    /// keeps their design-resolution-sized box correct across resizes on its own.
+    /// </summary>
+    void RefreshCanvasRotationSize(int i)
+    {
+        var e = _canvases[i];
+        if (e.canvas == null || e.rotationRoot == null) return;
+
+        if (e.scaler != null && e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
+        {
+            if (e.baseRefRes == Vector2.zero) return;
+
+            var scaledRT = e.rotationRoot.GetComponent<RectTransform>();
+            scaledRT.sizeDelta = new Vector2(
+                Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
+                Mathf.Min(e.baseRefRes.x, e.baseRefRes.y));
+            return;
+        }
+
+        Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
+        var containerRT = container as RectTransform;
+        if (containerRT == null) return;
+
+        Vector2 actualSize = containerRT.rect.size;
+        if (actualSize.x <= 0f || actualSize.y <= 0f) return;
+
+        var rt = e.rotationRoot.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(
+            Mathf.Max(actualSize.x, actualSize.y),
+            Mathf.Min(actualSize.x, actualSize.y));
     }
 
     static void UnparentRotationRoot(Transform container, GameObject rotationRoot)
