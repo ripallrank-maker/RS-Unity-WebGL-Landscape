@@ -36,15 +36,21 @@
       // Canvas size ({{{ WIDTH }}}x{{{ HEIGHT }}}).
       //
       // Fit modes:
-      //   "expand"  – canvas phủ kín 100% viewport. KHUYẾN NGHỊ cho package này:
-      //               để WebGLOrientationAdapter tự xoay portrait/landscape bên
-      //               trong Unity dựa trên kích thước thật của cửa sổ.
-      //   "contain" – giữ đúng tỷ lệ thiết kế, thêm viền (letterbox).
-      //   "cover"   – giữ tỷ lệ, phủ kín viewport bằng cách cắt bớt phần thừa.
+      //   "aspect"  – KHUYẾN NGHỊ cho package này. Giữ đúng tỷ lệ thiết kế và
+      //               letterbox (viền), NHƯNG tự lật tỷ lệ theo hướng viewport:
+      //               màn ngang → canvas ngang (vd 1.6), màn dọc → canvas dọc
+      //               (vd 0.625). Nhờ vậy canvas dọc vẫn cao hơn rộng nên
+      //               WebGLOrientationAdapter nhận diện đúng portrait và xoay
+      //               nội dung; đồng thời desktop/màn ngang lệch tỷ lệ không bị
+      //               cắt cạnh — chỉ cần bắt tỷ lệ ở CSS, adapter giữ nguyên.
+      //   "expand"  – canvas phủ kín 100% viewport (không giữ tỷ lệ, để adapter
+      //               tự lo mọi thứ). Có thể bị lòi/cắt trên màn lệch tỷ lệ.
+      //   "contain" – giữ đúng tỷ lệ CỐ ĐỊNH (không lật), letterbox.
+      //   "cover"   – giữ tỷ lệ cố định, phủ kín viewport bằng cách cắt bớt.
       //   "stretch" – kéo dãn lấp đầy, KHÔNG giữ tỷ lệ.
       var _rsOverride = (typeof window !== "undefined" && window.RSConfigOverride) ? window.RSConfigOverride : {};
       var RSConfig = {
-        fitMode:    _rsOverride.fitMode || "expand",
+        fitMode:    _rsOverride.fitMode || "aspect",
         aspectW:    (_rsOverride.aspectW > 0) ? _rsOverride.aspectW : {{{ WIDTH }}},
         aspectH:    (_rsOverride.aspectH > 0) ? _rsOverride.aspectH : {{{ HEIGHT }}},
         background: _rsOverride.background || "#231F20",
@@ -96,16 +102,29 @@
           // adapter) reacts to the real window dimensions.
           w = vw;
           h = vh;
+        } else if (mode === "aspect") {
+          // Keep the design aspect, but orient it to match the viewport so a
+          // portrait window still gets a portrait-shaped (tall) canvas — the
+          // in-Unity adapter then sees portrait and rotates the content. The
+          // design's long/short sides map to the viewport's long/short sides.
+          var dLong  = Math.max(RSConfig.aspectW, RSConfig.aspectH);
+          var dShort = Math.min(RSConfig.aspectW, RSConfig.aspectH);
+          var portrait = vh > vw;
+          var ar = portrait ? (dShort / dLong) : (dLong / dShort); // target canvas aspect
+          var vAr = vw / vh;
+          // Letterbox: fit entirely inside the viewport, keep aspect.
+          if (vAr > ar) { h = vh; w = h * ar; }
+          else          { w = vw; h = w / ar; }
         } else {
-          var ar = RSConfig.aspectW / RSConfig.aspectH;   // design aspect ratio
-          var vAr = vw / vh;                               // viewport aspect ratio
+          var ar2 = RSConfig.aspectW / RSConfig.aspectH;  // fixed design aspect (no flip)
+          var vAr2 = vw / vh;
           if (mode === "cover") {
             // Fill viewport, crop overflow.
-            if (vAr > ar) { w = vw; h = w / ar; }
-            else          { h = vh; w = h * ar; }
-          } else { // "contain" (default fallback): letterbox, keep aspect fully visible
-            if (vAr > ar) { h = vh; w = h * ar; }
-            else          { w = vw; h = w / ar; }
+            if (vAr2 > ar2) { w = vw; h = w / ar2; }
+            else            { h = vh; w = h * ar2; }
+          } else { // "contain": letterbox, keep the fixed aspect fully visible
+            if (vAr2 > ar2) { h = vh; w = h * ar2; }
+            else            { w = vw; h = w / ar2; }
           }
         }
 

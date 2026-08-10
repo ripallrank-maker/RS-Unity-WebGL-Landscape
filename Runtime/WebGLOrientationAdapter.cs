@@ -58,18 +58,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
              "Screen.safeArea. Không tự động làm gì nếu không có script nào gọi hàm này.")]
     [SerializeField] private bool applySafeAreaToWorld = false;
 
-    [Header("Landscape Letterbox")]
-    [Tooltip("Ở màn hình NGANG (desktop / landscape đã sẵn) có tỷ lệ khác thiết kế, giữ đúng " +
-             "khung thiết kế bằng letterbox (viền đen) thay vì để camera cắt cạnh (cửa sổ hẹp " +
-             "hơn) hoặc lòi thêm world (cửa sổ rộng hơn). Camera được crop viewport về đúng " +
-             "design aspect, một camera nền vẽ viền, và mọi Canvas Screen-Space được co vào " +
-             "khung design. Tắt để giữ hành vi cũ (camera lấp đầy viewport). Chế độ portrait " +
-             "không đổi.")]
-    [SerializeField] private bool letterboxLandscape = true;
-
-    [Tooltip("Màu viền letterbox do camera nền vẽ. Mặc định đen.")]
-    [SerializeField] private Color letterboxColor = Color.black;
-
     // ── JSLib bridge — orientation detection only ─────────────────────────────
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] static extern void WebGLOriBridge_Init(string goName);
@@ -102,10 +90,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
     // Screen-size polling
     private int _lastW, _lastH;
     private bool _pendingRefresh;
-
-    // Full-screen SolidColor camera that paints the letterbox bars behind the
-    // cropped game cameras in landscape. Created on demand, scene-scoped.
-    private Camera _letterboxBgCam;
 
     private readonly List<CameraEntry> _cameras = new List<CameraEntry>();
     private readonly List<CanvasEntry> _canvases = new List<CanvasEntry>();
@@ -144,16 +128,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
         public CanvasScaler scaler;
         public Vector2 baseRefRes;
         public CanvasScaler.ScaleMode scaleMode;
-        // Authored CanvasScaler match settings, restored on teardown so the base
-        // (landscape, no-letterbox) state matches what the scene designer set.
-        public float baseMatch;
-        public CanvasScaler.ScreenMatchMode baseMatchMode;
         public GameObject rotationRoot;
-        // Centered design-aspect wrapper used in landscape letterbox mode: all
-        // canvas content is parented inside it so anchored UI stays within the
-        // design box and the bars around it show through. Mutually exclusive with
-        // rotationRoot (portrait) in practice.
-        public GameObject letterboxRoot;
         // Outermost wrapper (direct child of canvas) inset to Screen.safeArea via
         // offsetMin/offsetMax. rotationRoot (or, in landscape, the original
         // children) is parented INSIDE this instead of directly under canvas, so
@@ -236,12 +211,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 yield return new WaitForEndOfFrame();
                 Canvas.ForceUpdateCanvases();
             }
-            else
-            {
-                RefreshLandscapeLetterbox();
-                yield return new WaitForEndOfFrame();
-                Canvas.ForceUpdateCanvases();
-            }
             yield break;
         }
 
@@ -304,13 +273,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 RefreshCanvasRotationSize(i);
             }
         }
-        else
-        {
-            // Still landscape, but the window was resized (very common on desktop:
-            // the aspect ratio changes as the user drags the window). Re-fit the
-            // letterbox crop to the new viewport aspect.
-            RefreshLandscapeLetterbox();
-        }
 
         _lastW = newW;
         _lastH = newH;
@@ -336,13 +298,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
         // gốc rồi swap NGƯỢC LẠI một lần nữa, khiến referenceResolution sai lệch
         // hẳn so với màn hình thật dù vẫn đang ở portrait (UI co lại thành khối
         // nhỏ giữa canvas thay vì phủ kín).
-        // Restore baseline before this adapter dies (e.g. scene change). Needed
-        // for portrait (canvas referenceResolution swap) AND landscape letterbox
-        // (CanvasScaler match-mode swap + letterbox roots + camera viewport crop
-        // on any DontDestroyOnLoad canvas/camera). ResetToBaseline now restores
-        // the authored scaler settings, so a persistent canvas is handed back
-        // clean and the next scene's baseline read is correct either way.
-        if (_baselineCaptured && (_isPortrait || letterboxLandscape))
+        if (_baselineCaptured && _isPortrait)
             ResetToBaseline();
 
 #if UNITY_EDITOR
@@ -447,8 +403,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 scaler = sc,
                 scaleMode = mode,
                 baseRefRes = res,
-                baseMatch = sc != null ? sc.matchWidthOrHeight : 0.5f,
-                baseMatchMode = sc != null ? sc.screenMatchMode : CanvasScaler.ScreenMatchMode.MatchWidthOrHeight,
                 rotationRoot = null
             });
             index = _canvases.Count - 1;
@@ -458,8 +412,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
         if (_isPortrait)
             ApplyPortraitToCanvas(index);
-        else if (letterboxLandscape)
-            ApplyLetterboxToCanvas(index);
     }
 
     /// <summary>
@@ -493,212 +445,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
-    void ApplyCurrent() { if (_isPortrait) ApplyPortrait(); else ApplyLandscape(); }
-
-    /// <summary>
-    /// Landscape handling. When <see cref="letterboxLandscape"/> is on, keeps the
-    /// exact design frame by cropping camera viewports to the design aspect (plus a
-    /// background camera for the bars) and confining Screen-Space canvases to a
-    /// centered design-sized root. Callers guarantee a clean base state first
-    /// (ResetToBaseline on flips, authored scene at Start).
-    /// </summary>
-    void ApplyLandscape()
-    {
-        if (!letterboxLandscape) return;
-
-        Vector2 landscapeRef = GetLandscapeRefRes();
-        float designAspect = landscapeRef.y > 0f ? landscapeRef.x / landscapeRef.y : 16f / 9f;
-        Rect box = ComputeLetterboxRect(designAspect);
-
-        // Cameras — crop each to the design-aspect box. Setting cam.rect drives
-        // cam.aspect to designAspect automatically, so the base orthographicSize
-        // already frames the exact design height/width. Cinemachine-driven
-        // cameras are fine too: the Brain writes transform/lens, never the
-        // Camera's viewport rect.
-        for (int i = _cameras.Count - 1; i >= 0; i--)
-        {
-            var e = _cameras[i];
-            if (e.cam == null) { _cameras.RemoveAt(i); continue; }
-            // Clear any manually-forced aspect first so cam.rect drives aspect to
-            // designAspect; then crop.
-            e.cam.ResetAspect();
-            e.cam.rect = box;
-        }
-
-        EnsureLetterboxBgCam();
-
-        for (int i = _canvases.Count - 1; i >= 0; i--)
-        {
-            if (_canvases[i].canvas == null) { _canvases.RemoveAt(i); continue; }
-            UpdateSafeAreaRoot(i);
-            ApplyLetterboxToCanvas(i);
-        }
-
-        if (debugLog)
-            Debug.Log($"[RSWebGLLandscape] ApplyLandscape letterbox designAspect={designAspect:F3} " +
-                      $"({Screen.width}x{Screen.height}) rect=({box.x:F3},{box.y:F3},{box.width:F3},{box.height:F3})");
-
-        Canvas.ForceUpdateCanvases();
-    }
-
-    /// <summary>
-    /// Normalized viewport rect (0..1) that fits the design aspect inside the
-    /// current screen, centered — pillarbox when the window is wider than design,
-    /// letterbox when taller/narrower.
-    /// </summary>
-    Rect ComputeLetterboxRect(float designAspect)
-    {
-        if (Screen.height <= 0 || designAspect <= 0f) return new Rect(0f, 0f, 1f, 1f);
-
-        float viewportAspect = (float)Screen.width / Screen.height;
-        if (viewportAspect > designAspect)
-        {
-            float w = designAspect / viewportAspect;
-            return new Rect((1f - w) * 0.5f, 0f, w, 1f);
-        }
-        float h = viewportAspect / designAspect;
-        return new Rect(0f, (1f - h) * 0.5f, 1f, h);
-    }
-
-    void EnsureLetterboxBgCam()
-    {
-        if (_letterboxBgCam != null) return;
-
-        // Lowest depth so it clears the whole framebuffer BEFORE the game cameras
-        // draw into their cropped rects — otherwise the bar area is never cleared
-        // and smears the previous frame.
-        float minDepth = 0f;
-        bool any = false;
-        foreach (var e in _cameras)
-        {
-            if (e.cam == null) continue;
-            if (!any || e.cam.depth < minDepth) { minDepth = e.cam.depth; any = true; }
-        }
-
-        var go = new GameObject("__LetterboxBackground__");
-        go.transform.SetParent(transform, false);
-        var cam = go.AddComponent<Camera>();
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = letterboxColor;
-        cam.cullingMask = 0;                    // renders nothing, only clears
-        cam.orthographic = true;
-        cam.rect = new Rect(0f, 0f, 1f, 1f);
-        cam.depth = (any ? minDepth : 0f) - 1f;
-        cam.useOcclusionCulling = false;
-        cam.allowHDR = false;
-        cam.allowMSAA = false;
-        _letterboxBgCam = cam;
-    }
-
-    /// <summary>
-    /// Confines a Screen-Space canvas to the centered design box. For
-    /// ScaleWithScreenSize canvases this uses ScreenMatchMode.Shrink (scaleFactor
-    /// = min(w/refW, h/refH)) so the design resolution maps exactly onto the box,
-    /// and a constant design-sized "__LetterboxRoot__" holds the content. Other
-    /// scale modes size the root to the box in pixels. Idempotent.
-    /// </summary>
-    void ApplyLetterboxToCanvas(int i)
-    {
-        var e = _canvases[i];
-        if (e.canvas == null) return;
-
-        if (e.scaler != null && e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
-        {
-            e.scaler.referenceResolution = new Vector2(
-                Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
-                Mathf.Min(e.baseRefRes.x, e.baseRefRes.y));
-            e.scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Shrink;
-        }
-
-        if (e.letterboxRoot == null)
-        {
-            Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
-
-            var rootGO = new GameObject("__LetterboxRoot__");
-            var rt = rootGO.AddComponent<RectTransform>();
-            rt.SetParent(container, false);
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Vector2.zero;
-            rt.localScale = Vector3.one;
-            rt.localRotation = Quaternion.identity;
-
-            var children = new List<Transform>();
-            foreach (Transform child in container)
-                if (child != rt) children.Add(child);
-            foreach (var child in children)
-                child.SetParent(rt, false);
-
-            e.letterboxRoot = rootGO;
-            _canvases[i] = e;
-        }
-
-        RefreshLetterboxCanvasSize(i);
-    }
-
-    /// <summary>
-    /// (Re)sizes a canvas' "__LetterboxRoot__". For ScaleWithScreenSize the box in
-    /// canvas units always equals the design resolution (thanks to Shrink), so the
-    /// root is a constant design-sized rect. Constant-pixel/physical canvases size
-    /// the root to the design-aspect box in canvas-local pixels, refreshed on resize.
-    /// </summary>
-    void RefreshLetterboxCanvasSize(int i)
-    {
-        var e = _canvases[i];
-        if (e.canvas == null || e.letterboxRoot == null) return;
-
-        var rt = e.letterboxRoot.GetComponent<RectTransform>();
-
-        if (e.scaler != null && e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
-        {
-            if (e.baseRefRes == Vector2.zero) return;
-            rt.sizeDelta = new Vector2(
-                Mathf.Max(e.baseRefRes.x, e.baseRefRes.y),
-                Mathf.Min(e.baseRefRes.x, e.baseRefRes.y));
-            return;
-        }
-
-        Vector2 landscapeRef = GetLandscapeRefRes();
-        float designAspect = landscapeRef.y > 0f ? landscapeRef.x / landscapeRef.y : 16f / 9f;
-        Rect box = ComputeLetterboxRect(designAspect);
-        float scale = e.canvas.scaleFactor > 0f ? e.canvas.scaleFactor : 1f;
-        rt.sizeDelta = new Vector2(
-            (box.width * Screen.width) / scale,
-            (box.height * Screen.height) / scale);
-    }
-
-    /// <summary>
-    /// Re-applies landscape letterbox sizing after a plain resize (no
-    /// portrait/landscape flip): camera rects depend on the viewport aspect, and
-    /// constant-pixel canvas roots depend on screen pixels.
-    /// </summary>
-    void RefreshLandscapeLetterbox()
-    {
-        if (!letterboxLandscape) return;
-
-        Vector2 landscapeRef = GetLandscapeRefRes();
-        float designAspect = landscapeRef.y > 0f ? landscapeRef.x / landscapeRef.y : 16f / 9f;
-        Rect box = ComputeLetterboxRect(designAspect);
-
-        for (int i = _cameras.Count - 1; i >= 0; i--)
-        {
-            var e = _cameras[i];
-            if (e.cam == null) { _cameras.RemoveAt(i); continue; }
-            e.cam.ResetAspect();
-            e.cam.rect = box;
-        }
-
-        EnsureLetterboxBgCam();
-
-        for (int i = 0; i < _canvases.Count; i++)
-        {
-            if (_canvases[i].canvas == null) continue;
-            if (applySafeAreaToCanvas) UpdateSafeAreaRoot(i);
-            if (_canvases[i].letterboxRoot == null) ApplyLetterboxToCanvas(i);
-            else RefreshLetterboxCanvasSize(i);
-        }
-    }
+    void ApplyCurrent() { if (_isPortrait) ApplyPortrait(); else ResetToBaseline(); }
 
     void CaptureBaseline()
     {
@@ -718,8 +465,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
         foreach (var cam in Camera.allCameras)
         {
             if (cam == null) continue;
-            // Never track the letterbox background camera we create ourselves.
-            if (cam == _letterboxBgCam || cam.gameObject.name == "__LetterboxBackground__") continue;
             if (_cameras.Exists(e => e.cam == cam)) continue;
             _cameras.Add(new CameraEntry
             {
@@ -775,8 +520,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 scaler = sc,
                 scaleMode = mode,
                 baseRefRes = res,
-                baseMatch = sc != null ? sc.matchWidthOrHeight : 0.5f,
-                baseMatchMode = sc != null ? sc.screenMatchMode : CanvasScaler.ScreenMatchMode.MatchWidthOrHeight,
                 rotationRoot = null
             });
         }
@@ -1178,20 +921,12 @@ public class WebGLOrientationAdapter : MonoBehaviour
             var e = _cameras[i];
             if (e.cam == null) { _cameras.RemoveAt(i); continue; }
             e.cam.ResetAspect();
-            e.cam.rect = new Rect(0f, 0f, 1f, 1f); // undo any landscape letterbox crop
 
             if (e.driveByCinemachine) continue; // handled via the vcam loop below
 
             e.cam.transform.rotation = e.baseRotation;
             if (e.cam.orthographic)
                 e.cam.orthographicSize = e.baseOrthographicSize;
-        }
-
-        // Remove the letterbox background camera if one was created.
-        if (_letterboxBgCam != null)
-        {
-            Object.Destroy(_letterboxBgCam.gameObject);
-            _letterboxBgCam = null;
         }
 
 #if RS_LANDSCAPE_CINEMACHINE
@@ -1216,31 +951,18 @@ public class WebGLOrientationAdapter : MonoBehaviour
             UpdateSafeAreaRoot(i);
             e = _canvases[i];
 
-            Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
-
             if (e.rotationRoot != null)
             {
+                Transform container = e.safeAreaRoot != null ? e.safeAreaRoot.transform : e.canvas.transform;
                 UnparentRotationRoot(container, e.rotationRoot);
                 e.rotationRoot = null;
                 _canvases[i] = e;
-                e = _canvases[i];
             }
 
-            if (e.letterboxRoot != null)
-            {
-                UnparentRotationRoot(container, e.letterboxRoot);
-                e.letterboxRoot = null;
-                _canvases[i] = e;
-                e = _canvases[i];
-            }
-
-            // Restore the authored CanvasScaler settings (portrait swaps the
-            // reference resolution + match; letterbox swaps the match mode).
             if (e.scaler != null && e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
             {
                 e.scaler.referenceResolution = e.baseRefRes;
-                e.scaler.screenMatchMode = e.baseMatchMode;
-                e.scaler.matchWidthOrHeight = e.baseMatch;
+                e.scaler.matchWidthOrHeight = 1f; // landscape → fit height
             }
         }
 

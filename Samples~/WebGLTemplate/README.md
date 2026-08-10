@@ -38,9 +38,9 @@ picker for the background.
 
 | Setting                 | Default        | Meaning |
 |-------------------------|----------------|---------|
-| **Fit Mode** (dropdown) | `Expand`       | `Expand` = fill viewport (recommended, lets the adapter rotate); `Contain` = keep aspect, letterbox; `Cover` = keep aspect, crop; `Stretch` = fill, ignore aspect. |
-| **Aspect Width**        | `0` (auto)     | Design aspect width for Contain/Cover. `0` = Player Settings Default Canvas Width. |
-| **Aspect Height**       | `0` (auto)     | Design aspect height for Contain/Cover. `0` = Player Settings Default Canvas Height. |
+| **Fit Mode** (dropdown) | `Aspect`       | `Aspect` = keep the design ratio + letterbox, **auto-flipped by orientation** (recommended — a portrait window stays portrait-shaped so the in-Unity adapter rotates the content, and off-ratio desktop/landscape screens are letterboxed instead of cropped); `Expand` = fill viewport; `Contain` = fixed aspect + letterbox (no flip); `Cover` = fixed aspect + crop; `Stretch` = fill, ignore aspect. |
+| **Aspect Width**        | `0` (auto)     | Design aspect width for Aspect/Contain/Cover. `0` = Player Settings Default Canvas Width. |
+| **Aspect Height**       | `0` (auto)     | Design aspect height for Aspect/Contain/Cover. `0` = Player Settings Default Canvas Height. |
 | **Background**          | `#231F20`      | Letterbox / page background color. |
 | **Max Device Pixel Ratio** | `0` (unlimited) | Cap on `devicePixelRatio` to reduce GPU load on high-DPI mobile screens (e.g. `2`). |
 

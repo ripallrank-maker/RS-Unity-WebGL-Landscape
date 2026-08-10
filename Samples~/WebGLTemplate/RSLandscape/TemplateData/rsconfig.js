@@ -5,10 +5,12 @@
 // package's Editor code is present. If you don't have the package installed,
 // edit the values here by hand.
 //
-// fitMode: "expand" | "contain" | "cover" | "stretch"
-// aspectW / aspectH: design aspect for contain/cover (0 = use Default Canvas size)
+// fitMode: "aspect" | "expand" | "contain" | "cover" | "stretch"
+//   "aspect" (recommended): keep the design ratio, letterbox, auto-flip by
+//   orientation so the in-Unity adapter still sees portrait as portrait.
+// aspectW / aspectH: design aspect (0 = use Default Canvas size)
 window.RSConfigOverride = {
-  fitMode: "expand",
+  fitMode: "aspect",
   aspectW: 0,
   aspectH: 0,
   background: "#231F20",

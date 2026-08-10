@@ -9,11 +9,13 @@ namespace RSWebGLLandscape.Editor
     /// <summary>How the WebGL canvas is fitted to the browser viewport.</summary>
     public enum RSFitMode
     {
-        /// <summary>Fill the whole viewport (recommended — lets WebGLOrientationAdapter rotate).</summary>
+        /// <summary>Recommended: keep the design ratio, letterbox, auto-flip by orientation so the adapter still sees portrait as portrait.</summary>
+        Aspect,
+        /// <summary>Fill the whole viewport (adapter handles everything; can crop/overflow on off-ratio screens).</summary>
         Expand,
-        /// <summary>Keep the design aspect ratio, letterbox the rest.</summary>
+        /// <summary>Keep a FIXED design aspect ratio (no flip), letterbox the rest.</summary>
         Contain,
-        /// <summary>Keep the design aspect ratio, crop to fill the viewport.</summary>
+        /// <summary>Keep a FIXED design aspect ratio (no flip), crop to fill the viewport.</summary>
         Cover,
         /// <summary>Stretch to fill, ignoring the aspect ratio.</summary>
         Stretch
@@ -29,7 +31,7 @@ namespace RSWebGLLandscape.Editor
     {
         internal const string SettingsPath = "ProjectSettings/RSWebGLTemplateSettings.asset";
 
-        public RSFitMode fitMode = RSFitMode.Expand;
+        public RSFitMode fitMode = RSFitMode.Aspect;
         public int aspectWidth = 0;   // 0 = use Player Settings Default Canvas Width
         public int aspectHeight = 0;  // 0 = use Player Settings Default Canvas Height
         public Color background = new Color(0x23 / 255f, 0x1F / 255f, 0x20 / 255f, 1f);
@@ -89,12 +91,14 @@ namespace RSWebGLLandscape.Editor
 
                     s.fitMode = (RSFitMode)EditorGUILayout.EnumPopup(
                         new GUIContent("Fit Mode",
-                            "Expand = fill viewport (recommended, lets the adapter rotate). " +
-                            "Contain = keep aspect + letterbox. Cover = keep aspect + crop. " +
-                            "Stretch = fill, ignore aspect."),
+                            "Aspect = keep design ratio + letterbox, auto-flipped by orientation " +
+                            "(recommended; portrait window stays portrait so the adapter rotates). " +
+                            "Expand = fill viewport. Contain = fixed aspect + letterbox. " +
+                            "Cover = fixed aspect + crop. Stretch = fill, ignore aspect."),
                         s.fitMode);
 
-                    bool aspectUsed = s.fitMode == RSFitMode.Contain || s.fitMode == RSFitMode.Cover;
+                    bool aspectUsed = s.fitMode == RSFitMode.Aspect
+                        || s.fitMode == RSFitMode.Contain || s.fitMode == RSFitMode.Cover;
                     using (new EditorGUI.DisabledScope(!aspectUsed))
                     {
                         s.aspectWidth = Mathf.Max(0, EditorGUILayout.IntField(
