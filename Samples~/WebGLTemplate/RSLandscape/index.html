@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity WebGL Player | {{{ PRODUCT_NAME }}}</title>
+    <!-- Fullscreen game viewport: no user zoom, fit the browser client area. -->
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover">
+    <link rel="stylesheet" href="TemplateData/style.css">
+  </head>
+  <body>
+    <!-- Structure/IDs kept identical to Unity's built-in template so it stays familiar. -->
+    <div id="unity-container">
+      <canvas id="unity-canvas" width={{{ WIDTH }}} height={{{ HEIGHT }}} tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+    </div>
+    <script>
+      // ── RS WebGL Landscape template ───────────────────────────────────────
+      // Based on Unity's default WebGL template. The ONLY behavioural change is
+      // how the canvas is sized: instead of a fixed WIDTH x HEIGHT box, the
+      // canvas is fitted to the browser viewport according to the config below.
+      //
+      // Every value comes from a Player Settings custom field (Project Settings
+      // > Player > Resolution and Presentation, shown once this template is
+      // selected). Each is guarded with `typeof ... !== 'undefined'` so the
+      // build still works if the field is left blank.
+      var RSConfig = {
+        // Cách co giãn canvas theo viewport trình duyệt:
+        //   "expand"  – canvas phủ kín 100% viewport. KHUYẾN NGHỊ cho package này:
+        //               để WebGLOrientationAdapter tự xoay portrait/landscape bên
+        //               trong Unity dựa trên kích thước thật của cửa sổ.
+        //   "contain" – giữ đúng tỷ lệ thiết kế, thêm viền (letterbox) 2 bên hoặc
+        //               trên/dưới cho vừa khít.
+        //   "cover"   – giữ tỷ lệ, phủ kín viewport bằng cách cắt bớt phần thừa.
+        //   "stretch" – kéo dãn lấp đầy, KHÔNG giữ tỷ lệ.
+        fitMode:  "{{{ typeof RS_FIT_MODE !== 'undefined' && RS_FIT_MODE ? RS_FIT_MODE : 'expand' }}}",
+        // Tỷ lệ thiết kế dùng cho contain/cover/stretch. Bỏ trống = lấy theo
+        // Default Canvas Width/Height của Player Settings ({{{ WIDTH }}}x{{{ HEIGHT }}}).
+        aspectW:  parseFloat("{{{ typeof RS_ASPECT_W !== 'undefined' && RS_ASPECT_W ? RS_ASPECT_W : WIDTH }}}")  || {{{ WIDTH }}},
+        aspectH:  parseFloat("{{{ typeof RS_ASPECT_H !== 'undefined' && RS_ASPECT_H ? RS_ASPECT_H : HEIGHT }}}") || {{{ HEIGHT }}},
+        // Màu nền viền letterbox (dùng ở chế độ contain).
+        background: "{{{ typeof RS_BACKGROUND !== 'undefined' && RS_BACKGROUND ? RS_BACKGROUND : '#231F20' }}}",
+        // Giới hạn devicePixelRatio để giảm tải GPU trên mobile (0 = không giới hạn).
+        maxDevicePixelRatio: parseFloat("{{{ typeof RS_MAX_DPR !== 'undefined' && RS_MAX_DPR ? RS_MAX_DPR : '0' }}}") || 0,
+      };
+
+      var container = document.querySelector("#unity-container");
+      var canvas = document.querySelector("#unity-canvas");
+      var loadingBar = document.querySelector("#unity-loading-bar");
+      var progressBarFull = document.querySelector("#unity-progress-bar-full");
+      var warningBanner = document.querySelector("#unity-warning");
+
+      document.body.style.background = RSConfig.background;
+      container.style.background = RSConfig.background;
+
+      // Shows a temporary message banner/ribbon for a few seconds, or
+      // a permanent error message on top of the canvas if type=='error'.
+      function unityShowBanner(msg, type) {
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      // ── Canvas fit logic (the only real change vs. Unity's template) ──────
+      // Sizes the canvas' CSS box to the viewport per RSConfig.fitMode. Unity's
+      // WebGL runtime matches the WebGL render-target to this CSS box times the
+      // device pixel ratio (config.matchWebGLToCanvasSize, on by default), so
+      // setting the CSS size here is enough to drive the actual resolution.
+      function applyCanvasFit() {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var mode = RSConfig.fitMode;
+        var w, h;
+
+        if (mode === "expand" || mode === "stretch") {
+          // Fill the whole viewport. Unity (and this package's orientation
+          // adapter) reacts to the real window dimensions.
+          w = vw;
+          h = vh;
+        } else {
+          var ar = RSConfig.aspectW / RSConfig.aspectH;   // design aspect ratio
+          var vAr = vw / vh;                               // viewport aspect ratio
+          if (mode === "cover") {
+            // Fill viewport, crop overflow.
+            if (vAr > ar) { w = vw; h = w / ar; }
+            else          { h = vh; w = h * ar; }
+          } else { // "contain" (default fallback): letterbox, keep aspect fully visible
+            if (vAr > ar) { h = vh; w = h * ar; }
+            else          { w = vw; h = w / ar; }
+          }
+        }
+
+        canvas.style.width  = Math.round(w) + "px";
+        canvas.style.height = Math.round(h) + "px";
+      }
+
+      window.addEventListener("resize", applyCanvasFit);
+      window.addEventListener("orientationchange", function () {
+        // Some browsers report stale innerWidth/innerHeight on the change event;
+        // re-apply once things have settled.
+        applyCanvasFit();
+        setTimeout(applyCanvasFit, 300);
+      });
+      applyCanvasFit();
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#if MEMORY_FILENAME
+        memoryUrl: buildUrl + "/{{{ MEMORY_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: unityShowBanner,
+      };
+
+      // Keep the WebGL render-target locked to the canvas' CSS size (default).
+      // Leave this on so the fit logic above drives the real resolution.
+      config.matchWebGLToCanvasSize = true;
+
+      if (RSConfig.maxDevicePixelRatio > 0) {
+        config.devicePixelRatio = Math.min(window.devicePixelRatio || 1, RSConfig.maxDevicePixelRatio);
+      }
+
+      loadingBar.style.display = "block";
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+          progressBarFull.style.width = 100 * progress + "%";
+        }).then((unityInstance) => {
+          loadingBar.style.display = "none";
+          window.unityInstance = unityInstance;
+          applyCanvasFit();
+        }).catch((message) => {
+          alert(message);
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>

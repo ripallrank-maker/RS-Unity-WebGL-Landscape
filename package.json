@@ -18,5 +18,12 @@
   "dependencies": {
     "com.unity.ugui": "1.0.0",
     "com.unity.cinemachine": "2.9.7"
-  }
+  },
+  "samples": [
+    {
+      "displayName": "WebGL Template (Landscape Fit)",
+      "description": "Unity WebGL template that fits the canvas to the browser viewport by aspect ratio, configurable from Player Settings. After importing, copy the RSLandscape folder into Assets/WebGLTemplates/.",
+      "path": "Samples~/WebGLTemplate"
+    }
+  ]
 }

@@ -5,6 +5,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **RSLandscape WebGL template** (importable UPM sample under `Samples~/WebGLTemplate`): based on Unity's built-in template, changed only in how the canvas is sized — it fits the browser viewport by a configurable fit mode (`expand` / `contain` / `cover` / `stretch`) and design aspect ratio. The fields (`RS_FIT_MODE`, `RS_ASPECT_W`, `RS_ASPECT_H`, `RS_BACKGROUND`, `RS_MAX_DPR`) surface in Player Settings. The default `expand` mode fills the viewport so `WebGLOrientationAdapter` can drive portrait/landscape rotation from the real window size.
+
 ### Fixed
 - Assembly definition no longer excludes the `WebGL` platform (it was excluding the very target the package is for).
 - Camera `orthographicSize` correction in portrait now uses `baseOrthographicSize / cam.aspect`, matching the CanvasScaler's own scaling exactly so world-space content (e.g. tutorial hitboxes) stays pixel-aligned with Screen-Space UI. The old fill/fit min/max formula could drift out of sync with the canvas.

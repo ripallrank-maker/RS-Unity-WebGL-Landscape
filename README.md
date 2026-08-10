@@ -57,6 +57,16 @@ to know the first orientation pass has completed.
 Call `WebGLOrientationAdapter.Instance.SimulatePortrait(true/false)` to preview portrait
 handling in the Editor without a browser.
 
+## WebGL template
+
+The package ships an optional **RSLandscape** WebGL template (importable via
+Package Manager → Samples). It's Unity's built-in template with one change: the
+canvas is fitted to the browser viewport by a configurable fit mode and aspect
+ratio (fields in Player Settings). The default `expand` mode fills the whole
+window so this adapter can drive portrait/landscape rotation from the real window
+size. See [Samples~/WebGLTemplate/README.md](Samples~/WebGLTemplate/README.md)
+for setup and the config fields.
+
 ## Requirements
 
 - Unity 2021.3 or newer
