@@ -113,7 +113,11 @@ public class WebGLOrientationAdapter : MonoBehaviour
     struct VirtualCameraEntry
     {
         public CinemachineVirtualCamera vcam;
-        public Quaternion baseRotation;
+        // Roll is applied via the lens Dutch angle, NOT the vcam transform:
+        // Cinemachine ignores a Z-roll baked into the transform once the Aim
+        // stage runs, so a transform.localRotation write never reaches the
+        // rendered camera. Dutch is applied after Body/Aim and always survives.
+        public float baseDutch;
         public float baseOrthographicSize;
     }
 #endif
@@ -483,7 +487,7 @@ public class WebGLOrientationAdapter : MonoBehaviour
             _vcams.Add(new VirtualCameraEntry
             {
                 vcam = vcam,
-                baseRotation = vcam.transform.localRotation,
+                baseDutch = vcam.m_Lens.Dutch,
                 baseOrthographicSize = vcam.m_Lens.OrthographicSize
             });
         }
@@ -644,16 +648,18 @@ public class WebGLOrientationAdapter : MonoBehaviour
                 continue;
             }
 
-            v.vcam.transform.localRotation =
-                v.baseRotation * Quaternion.Euler(0f, 0f, -portraitRotationDeg);
-
             var lens = v.vcam.m_Lens;
+            // Roll the rendered view via Dutch (mirrors the plain-camera path's
+            // transform Euler(0,0,-portraitRotationDeg)). AngleAxis(Dutch, fwd)
+            // and Euler(0,0,θ) share the same sign about +Z, so Dutch =
+            // -portraitRotationDeg matches the direct-camera rotation exactly.
+            lens.Dutch = v.baseDutch - portraitRotationDeg;
             lens.OrthographicSize = v.baseOrthographicSize / vcamAspect;
             v.vcam.m_Lens = lens;
 
             if (debugLog)
                 Debug.Log($"[RSWebGLLandscape] vcam '{v.vcam.name}' baseOrtho={v.baseOrthographicSize:F3} " +
-                          $"aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3}");
+                          $"aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3} dutch={lens.Dutch:F1}");
         }
 #endif
 
@@ -929,8 +935,8 @@ public class WebGLOrientationAdapter : MonoBehaviour
             var v = _vcams[i];
             if (v.vcam == null) { _vcams.RemoveAt(i); continue; }
 
-            v.vcam.transform.localRotation = v.baseRotation;
             var lens = v.vcam.m_Lens;
+            lens.Dutch = v.baseDutch;
             lens.OrthographicSize = v.baseOrthographicSize;
             v.vcam.m_Lens = lens;
         }

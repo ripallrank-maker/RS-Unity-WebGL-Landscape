@@ -5,6 +5,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Cinemachine virtual cameras now actually rotate in portrait mode. The adapter was rolling the vcam via `transform.localRotation`, which Cinemachine discards once its Aim stage runs, so the rendered camera never tilted. Roll is now applied through the lens **Dutch** angle (baselined and restored per vcam), which survives the Body/Aim pipeline. Sign matches the plain-camera path (`Dutch = -portraitRotationDeg`).
+
 ### Added
 - **RSLandscape WebGL template** (importable UPM sample under `Samples~/WebGLTemplate`): based on Unity's built-in template, changed only in how the canvas is sized — it fits the browser viewport by a configurable fit mode (`expand` / `contain` / `cover` / `stretch`) and design aspect ratio. The default `expand` mode fills the viewport so `WebGLOrientationAdapter` can drive portrait/landscape rotation from the real window size.
 - **Project Settings → RS WebGL Landscape** page (package Editor code) with a real **enum dropdown** for the fit mode plus a color picker — Unity's built-in template custom fields are text-only. A WebGL build post-processor writes the chosen values into `TemplateData/rsconfig.js`, which `index.html` reads via `window.RSConfigOverride`. The template still works standalone (edit `rsconfig.js` by hand) when the package Editor code isn't present.
