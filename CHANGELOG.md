@@ -6,7 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **RSLandscape WebGL template** (importable UPM sample under `Samples~/WebGLTemplate`): based on Unity's built-in template, changed only in how the canvas is sized — it fits the browser viewport by a configurable fit mode (`expand` / `contain` / `cover` / `stretch`) and design aspect ratio. The fields (`RS_FIT_MODE`, `RS_ASPECT_W`, `RS_ASPECT_H`, `RS_BACKGROUND`, `RS_MAX_DPR`) surface in Player Settings. The default `expand` mode fills the viewport so `WebGLOrientationAdapter` can drive portrait/landscape rotation from the real window size.
+- **RSLandscape WebGL template** (importable UPM sample under `Samples~/WebGLTemplate`): based on Unity's built-in template, changed only in how the canvas is sized — it fits the browser viewport by a configurable fit mode (`expand` / `contain` / `cover` / `stretch`) and design aspect ratio. The default `expand` mode fills the viewport so `WebGLOrientationAdapter` can drive portrait/landscape rotation from the real window size.
+- **Project Settings → RS WebGL Landscape** page (package Editor code) with a real **enum dropdown** for the fit mode plus a color picker — Unity's built-in template custom fields are text-only. A WebGL build post-processor writes the chosen values into `TemplateData/rsconfig.js`, which `index.html` reads via `window.RSConfigOverride`. The template still works standalone (edit `rsconfig.js` by hand) when the package Editor code isn't present.
 
 ### Fixed
 - Assembly definition no longer excludes the `WebGL` platform (it was excluding the very target the package is for).

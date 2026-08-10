@@ -29,22 +29,29 @@ this sample is a two-step process:
 3. **Project Settings → Player → WebGL → Resolution and Presentation → WebGL
    Template**, choose **RSLandscape**.
 
-## Config fields (Player Settings)
+## Config (Project Settings → RS WebGL Landscape)
 
-Once **RSLandscape** is selected, the fields below appear under *Resolution and
-Presentation*. All are optional — leaving one blank uses the default shown.
+Unity's built-in WebGL template custom fields are text-only (no dropdowns), so
+the config lives in a dedicated settings page instead: **Project Settings → RS
+WebGL Landscape**. It has a real **enum dropdown** for the fit mode and a color
+picker for the background.
 
-| Field           | Default                     | Meaning |
-|-----------------|-----------------------------|---------|
-| `RS_FIT_MODE`   | `expand`                    | `expand` = fill viewport (recommended, let the adapter handle rotation); `contain` = keep aspect, letterbox; `cover` = keep aspect, crop to fill; `stretch` = fill, ignore aspect. |
-| `RS_ASPECT_W`   | Default Canvas **Width**    | Design aspect width (used by contain/cover). |
-| `RS_ASPECT_H`   | Default Canvas **Height**   | Design aspect height (used by contain/cover). |
-| `RS_BACKGROUND` | `#231F20`                   | Letterbox / page background color. |
-| `RS_MAX_DPR`    | `0` (unlimited)             | Cap on `devicePixelRatio` to reduce GPU load on high-DPI mobile screens (e.g. `2`). |
+| Setting                 | Default        | Meaning |
+|-------------------------|----------------|---------|
+| **Fit Mode** (dropdown) | `Expand`       | `Expand` = fill viewport (recommended, lets the adapter rotate); `Contain` = keep aspect, letterbox; `Cover` = keep aspect, crop; `Stretch` = fill, ignore aspect. |
+| **Aspect Width**        | `0` (auto)     | Design aspect width for Contain/Cover. `0` = Player Settings Default Canvas Width. |
+| **Aspect Height**       | `0` (auto)     | Design aspect height for Contain/Cover. `0` = Player Settings Default Canvas Height. |
+| **Background**          | `#231F20`      | Letterbox / page background color. |
+| **Max Device Pixel Ratio** | `0` (unlimited) | Cap on `devicePixelRatio` to reduce GPU load on high-DPI mobile screens (e.g. `2`). |
 
-> If the custom fields don't show in your Unity version, edit the `RSConfig`
-> block at the top of `index.html` directly — the same values live there with the
-> same defaults.
+On each WebGL build these values are written to `TemplateData/rsconfig.js` in the
+output (via a build post-processor in the package's Editor code), and
+`index.html` reads them from `window.RSConfigOverride`.
+
+> **Using the template without the package's Editor code?** The dropdown page and
+> the auto-generated `rsconfig.js` both come from the package. If you only copied
+> the template files, just edit `TemplateData/rsconfig.js` by hand — it holds the
+> same values with the same defaults.
 
 ## Notes
 

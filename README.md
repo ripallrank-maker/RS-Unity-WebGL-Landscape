@@ -62,10 +62,11 @@ handling in the Editor without a browser.
 The package ships an optional **RSLandscape** WebGL template (importable via
 Package Manager → Samples). It's Unity's built-in template with one change: the
 canvas is fitted to the browser viewport by a configurable fit mode and aspect
-ratio (fields in Player Settings). The default `expand` mode fills the whole
-window so this adapter can drive portrait/landscape rotation from the real window
-size. See [Samples~/WebGLTemplate/README.md](Samples~/WebGLTemplate/README.md)
-for setup and the config fields.
+ratio. The default `expand` mode fills the whole window so this adapter can drive
+portrait/landscape rotation from the real window size. Configure it under
+**Project Settings → RS WebGL Landscape** (enum dropdown for the fit mode). See
+[Samples~/WebGLTemplate/README.md](Samples~/WebGLTemplate/README.md) for setup
+and the config options.
 
 ## Requirements
 
