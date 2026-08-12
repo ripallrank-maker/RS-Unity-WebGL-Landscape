@@ -53,6 +53,11 @@
       var _rsOverride = (typeof window !== "undefined" && window.RSConfigOverride) ? window.RSConfigOverride : {};
       var RSConfig = {
         fitMode:    _rsOverride.fitMode || "expand",
+        // aspectW / aspectH: tỷ lệ THIẾT KẾ của game bạn (vd game dựng ở
+        // 1920x1080 thì điền 1920/1080; game vuông 1:1 thì điền 1/1...). CHỈ
+        // dùng khi fitMode là "aspect"/"contain"/"cover" — bỏ qua ở "expand"
+        // và "stretch". Điền đúng theo Canvas/CanvasScaler/camera của game,
+        // KHÔNG phải kích thước màn hình người chơi.
         aspectW:    (_rsOverride.aspectW > 0) ? _rsOverride.aspectW : 1920,
         aspectH:    (_rsOverride.aspectH > 0) ? _rsOverride.aspectH : 1080,
         background: _rsOverride.background || "#231F20",

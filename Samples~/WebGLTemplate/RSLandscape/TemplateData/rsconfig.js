@@ -9,8 +9,10 @@
 //   "expand" (default): fill the whole viewport, no aspect kept.
 //   "aspect": keep the design ratio, letterbox, auto-flip by orientation so
 //   the in-Unity adapter still sees portrait as portrait.
-// aspectW / aspectH: design aspect, only used by aspect/contain/cover
-//   (0 = template default 1920x1080, independent of Player Settings)
+// aspectW / aspectH: the aspect ratio YOUR GAME is designed at (e.g. a game
+//   built at 1920x1080 → aspectW: 1920, aspectH: 1080), NOT the player's
+//   screen size. Only used by fitMode "aspect"/"contain"/"cover" — ignored
+//   by "expand"/"stretch". 0 = template default 1920x1080.
 window.RSConfigOverride = {
   fitMode: "expand",
   aspectW: 0,

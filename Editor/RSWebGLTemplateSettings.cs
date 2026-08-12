@@ -103,10 +103,14 @@ namespace RSWebGLLandscape.Editor
                     using (new EditorGUI.DisabledScope(!aspectUsed))
                     {
                         s.aspectWidth = Mathf.Max(0, EditorGUILayout.IntField(
-                            new GUIContent("Aspect Width", "0 = template default (1920)"),
+                            new GUIContent("Aspect Width",
+                                "The width of YOUR GAME's design resolution (e.g. 1920 for a " +
+                                "1920x1080 game), not the player's screen. 0 = template default (1920)."),
                             s.aspectWidth));
                         s.aspectHeight = Mathf.Max(0, EditorGUILayout.IntField(
-                            new GUIContent("Aspect Height", "0 = template default (1080)"),
+                            new GUIContent("Aspect Height",
+                                "The height of YOUR GAME's design resolution (e.g. 1080 for a " +
+                                "1920x1080 game), not the player's screen. 0 = template default (1080)."),
                             s.aspectHeight));
                     }
 
