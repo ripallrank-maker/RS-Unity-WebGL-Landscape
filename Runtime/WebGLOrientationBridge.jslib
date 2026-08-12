@@ -25,7 +25,16 @@ mergeInto(LibraryManager.library, {
             goName: goName,
             debounceTimer: null,
 
+            // Prefer visualViewport: window.innerWidth/innerHeight can include
+            // area covered by the URL bar / on-screen keyboard and briefly
+            // report stale values mid-rotation, which flips this comparison
+            // and disagrees with the CSS canvas shape computed the same way in
+            // index.html (applyCanvasFit/getViewportSize) — keep both reads
+            // consistent so the canvas box and Unity's rotation state agree.
             isPortrait: function() {
+                if (window.visualViewport) {
+                    return window.visualViewport.height > window.visualViewport.width;
+                }
                 return window.innerHeight > window.innerWidth;
             },
 
@@ -44,10 +53,16 @@ mergeInto(LibraryManager.library, {
         window.addEventListener('orientationchange', function() {
             setTimeout(Module['WebGLOriBridge'].notify, 300);
         });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', Module['WebGLOriBridge'].notify);
+        }
     },
 
     // Synchronous portrait query — safe to call on the very first frame.
     WebGLOriBridge_IsPortrait: function() {
+        if (window.visualViewport) {
+            return window.visualViewport.height > window.visualViewport.width ? 1 : 0;
+        }
         return window.innerHeight > window.innerWidth ? 1 : 0;
     },
 
@@ -57,6 +72,9 @@ mergeInto(LibraryManager.library, {
 
         window.removeEventListener('resize', bridge.notify);
         window.removeEventListener('orientationchange', bridge.notify);
+        if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', bridge.notify);
+        }
         if (bridge.debounceTimer) clearTimeout(bridge.debounceTimer);
         bridge.initialized = false;
     }

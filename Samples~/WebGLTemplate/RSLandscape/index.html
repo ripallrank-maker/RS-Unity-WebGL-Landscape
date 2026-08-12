@@ -91,9 +91,25 @@
       // WebGL runtime matches the WebGL render-target to this CSS box times the
       // device pixel ratio (config.matchWebGLToCanvasSize, on by default), so
       // setting the CSS size here is enough to drive the actual resolution.
+      // Real available viewport size to judge orientation from. Prefer
+      // visualViewport: on mobile browsers window.innerWidth/innerHeight can
+      // include area covered by the URL bar / on-screen keyboard and briefly
+      // report stale values right after a rotation, which flips the vw/vh
+      // comparison below and picks the wrong (portrait vs landscape) design
+      // aspect. visualViewport tracks the actually-visible area and updates
+      // more reliably across browsers/devices; falls back to inner* when
+      // unsupported (older desktop browsers).
+      function getViewportSize() {
+        if (window.visualViewport) {
+          return { w: window.visualViewport.width, h: window.visualViewport.height };
+        }
+        return { w: window.innerWidth, h: window.innerHeight };
+      }
+
       function applyCanvasFit() {
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
+        var vp = getViewportSize();
+        var vw = vp.w;
+        var vh = vp.h;
         var mode = RSConfig.fitMode;
         var w, h;
 
@@ -132,14 +148,23 @@
         canvas.style.height = Math.round(h) + "px";
       }
 
-      window.addEventListener("resize", applyCanvasFit);
-      window.addEventListener("orientationchange", function () {
-        // Some browsers report stale innerWidth/innerHeight on the change event;
-        // re-apply once things have settled.
+      // Re-applies shortly after the initial call and after every resize/
+      // orientation event: the browser can report a stale/mid-transition
+      // viewport size on the same tick these fire (URL bar animating in/out,
+      // on-screen keyboard opening, device still finishing its rotation), which
+      // would otherwise get baked in as the wrong orientation until the next
+      // real resize. A cheap re-check afterwards self-corrects it.
+      function applyCanvasFitSettled() {
         applyCanvasFit();
         setTimeout(applyCanvasFit, 300);
-      });
-      applyCanvasFit();
+      }
+
+      window.addEventListener("resize", applyCanvasFitSettled);
+      window.addEventListener("orientationchange", applyCanvasFitSettled);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", applyCanvasFitSettled);
+      }
+      applyCanvasFitSettled();
 
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
