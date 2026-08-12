@@ -201,11 +201,18 @@ public class WebGLOrientationAdapter : MonoBehaviour
         if (actuallyPortrait == _isPortrait)
         {
             // Orientation guess was right, but the viewport dimensions themselves
-            // may still have been wrong at the time canvases were first rotated
-            // (the whole reason this recheck exists) — refresh their rotation-root
-            // sizes against the now-settled Screen.width/height regardless.
+            // may still have been wrong at the time canvases (and the camera) were
+            // first rotated/scaled (the whole reason this recheck exists) — refresh
+            // camera framing and canvas rotation-root sizes against the now-settled
+            // Screen.width/height regardless. Refreshing the camera here matters as
+            // much as the canvases: its orthoSize/aspect was baked in from whatever
+            // Screen size was current at that first apply, and previously nothing
+            // re-derived it afterwards — leaving world-space content (and any
+            // Physics2D raycast through Camera.ScreenToWorldPoint) misaligned with
+            // the correctly-refit UI for the rest of the scene's lifetime.
             if (_isPortrait)
             {
+                RefreshCameraFraming();
                 for (int i = 0; i < _canvases.Count; i++)
                     RefreshCanvasRotationSize(i);
                 yield return new WaitForEndOfFrame();
@@ -265,8 +272,12 @@ public class WebGLOrientationAdapter : MonoBehaviour
             // Same portrait/landscape state, but absolute dimensions still changed
             // (e.g. a WebView's viewport settling to its real size after an initial
             // stale read, or safeArea changing side when rotating landscape-left vs
-            // landscape-right) — refresh rotation-root sizes and safe-area insets
-            // without a full rotation reset/apply.
+            // landscape-right) — refresh camera framing + rotation-root sizes and
+            // safe-area insets without a full rotation reset/apply. The camera refit
+            // matters just as much as the canvas one: its orthoSize/aspect was
+            // computed from the dimensions current at the LAST ApplyPortrait() call,
+            // which is exactly what's stale here.
+            RefreshCameraFraming();
             for (int i = 0; i < _canvases.Count; i++)
             {
                 if (applySafeAreaToCanvas) UpdateSafeAreaRoot(i);
@@ -561,6 +572,41 @@ public class WebGLOrientationAdapter : MonoBehaviour
 
     void ApplyPortrait()
     {
+        RefreshCameraFraming();
+
+        // ── Canvases ──────────────────────────────────────────────────────────
+        for (int i = _canvases.Count - 1; i >= 0; i--)
+        {
+            if (_canvases[i].canvas == null)
+            {
+                _canvases.RemoveAt(i);
+                continue;
+            }
+
+            UpdateSafeAreaRoot(i);
+            ApplyPortraitToCanvas(i);
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+    /// <summary>
+    /// Recomputes camera rotation + orthographicSize (and Cinemachine vcam Dutch/lens)
+    /// against the CURRENT Screen.width/height. Split out of ApplyPortrait() so it can
+    /// also be re-run on its own from OnScreenSizeChanged/RecheckOrientationAfterSettle
+    /// when the portrait/landscape STATE doesn't flip but the actual pixel dimensions
+    /// do — e.g. a stale window.innerWidth/innerHeight on first WebGL load settling to
+    /// its real value shortly after (see the comments on those two call sites). Before
+    /// this split, that path only called RefreshCanvasRotationSize() on the canvases;
+    /// the camera's orthoSize/aspect stayed locked to whatever (possibly stale) Screen
+    /// size was current the first time ApplyPortrait() ran, leaving world-space content
+    /// — and any Physics2D raycast mapped through Camera.ScreenToWorldPoint, e.g. a
+    /// tutorial-highlight hit test — misaligned with the correctly-refit UI forever
+    /// after, even though nothing looked wrong in the Editor's orientation simulator
+    /// (which sets an exact resolution up front, so it never hits a stale read).
+    /// </summary>
+    void RefreshCameraFraming()
+    {
         Vector2 landscapeRef = GetLandscapeRefRes();
 
         float designAspect = landscapeRef.y > 0f
@@ -662,21 +708,6 @@ public class WebGLOrientationAdapter : MonoBehaviour
                           $"aspect={vcamAspect:F3} → ortho={lens.OrthographicSize:F3} dutch={lens.Dutch:F1}");
         }
 #endif
-
-        // ── Canvases ──────────────────────────────────────────────────────────
-        for (int i = _canvases.Count - 1; i >= 0; i--)
-        {
-            if (_canvases[i].canvas == null)
-            {
-                _canvases.RemoveAt(i);
-                continue;
-            }
-
-            UpdateSafeAreaRoot(i);
-            ApplyPortraitToCanvas(i);
-        }
-
-        Canvas.ForceUpdateCanvases();
     }
 
     /// <summary>
