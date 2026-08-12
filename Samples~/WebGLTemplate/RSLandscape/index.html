@@ -40,16 +40,24 @@
       //   "expand"  – MẶC ĐỊNH. Canvas phủ kín 100% viewport (không giữ tỷ lệ,
       //               để adapter tự lo mọi thứ). Có thể bị lòi/cắt trên màn
       //               lệch tỷ lệ.
-      //   "aspect"  – Giữ đúng tỷ lệ thiết kế (aspectW/aspectH) và letterbox
-      //               (viền), NHƯNG tự lật tỷ lệ theo hướng viewport: màn
-      //               ngang → canvas ngang (vd 1.6), màn dọc → canvas dọc
-      //               (vd 0.625). Nhờ vậy canvas dọc vẫn cao hơn rộng nên
-      //               WebGLOrientationAdapter nhận diện đúng portrait và xoay
-      //               nội dung; đồng thời desktop/màn ngang lệch tỷ lệ không bị
-      //               cắt cạnh — chỉ cần bắt tỷ lệ ở CSS, adapter giữ nguyên.
-      //   "contain" – giữ đúng tỷ lệ CỐ ĐỊNH (không lật), letterbox.
-      //   "cover"   – giữ tỷ lệ cố định, phủ kín viewport bằng cách cắt bớt.
+      //   "aspect"  – Giữ đúng tỷ lệ thiết kế (aspectW/aspectH), letterbox
+      //               (viền), TỰ LẬT tỷ lệ theo hướng viewport: màn ngang →
+      //               canvas ngang (vd 1.6), màn dọc → canvas dọc, tức
+      //               1/aspect (vd 0.625). Nhờ vậy canvas dọc vẫn cao hơn
+      //               rộng nên WebGLOrientationAdapter nhận diện đúng
+      //               portrait và xoay nội dung; đồng thời desktop/màn ngang
+      //               lệch tỷ lệ không bị cắt cạnh — chỉ cần bắt tỷ lệ ở CSS,
+      //               adapter giữ nguyên.
+      //   "contain" – giống "aspect" (tự lật theo hướng viewport), letterbox.
+      //   "cover"   – giống "aspect" (tự lật theo hướng viewport), phủ kín
+      //               viewport bằng cách cắt bớt thay vì letterbox.
       //   "stretch" – kéo dãn lấp đầy, KHÔNG giữ tỷ lệ.
+      //
+      // aspectW/aspectH LUÔN là tỷ lệ THIẾT KẾ gốc của game (vd game dựng ở
+      // 1920x1080 thì aspectW=1920, aspectH=1080) — không tự đảo theo màn
+      // hình. "aspect"/"contain"/"cover" tự đảo ngược (1/aspect) khi phát
+      // hiện viewport đang portrait (w < h); KHÔNG được điền sẵn tỷ lệ đã
+      // đảo (vd 9x16 cho game 16:9) vì sẽ bị đảo NGƯỢC LẦN NỮA và co sai.
       var _rsOverride = (typeof window !== "undefined" && window.RSConfigOverride) ? window.RSConfigOverride : {};
       var RSConfig = {
         fitMode:    _rsOverride.fitMode || "expand",
@@ -139,13 +147,24 @@
           if (vAr > ar) { h = vh; w = h * ar; }
           else          { w = vw; h = w / ar; }
         } else {
-          var ar2 = RSConfig.aspectW / RSConfig.aspectH;  // fixed design aspect (no flip)
+          // aspectW/aspectH describe the GAME's design aspect (e.g. a 16:9
+          // landscape game → aspectW: 16, aspectH: 9), regardless of device
+          // orientation. On a portrait viewport (w < h) that ratio must be
+          // inverted (1 / aspect) — using it as-is would letterbox/crop the
+          // canvas into a landscape-shaped box squeezed inside a portrait
+          // screen, shrinking the UI wrong. Same long/short-side flip as the
+          // "aspect" mode above; "contain" vs "cover" only differ in
+          // letterbox-vs-crop, not in this flip.
+          var dLong2  = Math.max(RSConfig.aspectW, RSConfig.aspectH);
+          var dShort2 = Math.min(RSConfig.aspectW, RSConfig.aspectH);
+          var portrait2 = vh > vw;
+          var ar2 = portrait2 ? (dShort2 / dLong2) : (dLong2 / dShort2);
           var vAr2 = vw / vh;
           if (mode === "cover") {
             // Fill viewport, crop overflow.
             if (vAr2 > ar2) { w = vw; h = w / ar2; }
             else            { h = vh; w = h * ar2; }
-          } else { // "contain": letterbox, keep the fixed aspect fully visible
+          } else { // "contain": letterbox, keep the aspect fully visible
             if (vAr2 > ar2) { h = vh; w = h * ar2; }
             else            { w = vw; h = w / ar2; }
           }
