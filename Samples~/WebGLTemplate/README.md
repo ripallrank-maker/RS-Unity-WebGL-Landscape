@@ -2,8 +2,9 @@
 
 A Unity WebGL template based on Unity's built-in **Default** template, changed in
 one way only: **how the canvas is sized**. Instead of a fixed `WIDTH x HEIGHT`
-box it fits the canvas to the browser viewport according to a few fields you set
-in **Player Settings**.
+box (Player Settings' Default Canvas size is not used at all) it fits the canvas
+to the browser viewport according to a few fields you set in **Project Settings
+→ RS WebGL Landscape**.
 
 This pairs with the `WebGLOrientationAdapter` in this package: with the default
 `expand` fit mode the canvas fills the whole browser window, so Unity always sees
@@ -38,9 +39,9 @@ picker for the background.
 
 | Setting                 | Default        | Meaning |
 |-------------------------|----------------|---------|
-| **Fit Mode** (dropdown) | `Aspect`       | `Aspect` = keep the design ratio + letterbox, **auto-flipped by orientation** (recommended — a portrait window stays portrait-shaped so the in-Unity adapter rotates the content, and off-ratio desktop/landscape screens are letterboxed instead of cropped); `Expand` = fill viewport; `Contain` = fixed aspect + letterbox (no flip); `Cover` = fixed aspect + crop; `Stretch` = fill, ignore aspect. |
-| **Aspect Width**        | `0` (auto)     | Design aspect width for Aspect/Contain/Cover. `0` = Player Settings Default Canvas Width. |
-| **Aspect Height**       | `0` (auto)     | Design aspect height for Aspect/Contain/Cover. `0` = Player Settings Default Canvas Height. |
+| **Fit Mode** (dropdown) | `Expand`       | `Expand` = fill the whole viewport, no aspect kept (default); `Aspect` = keep the design ratio + letterbox, **auto-flipped by orientation** (a portrait window stays portrait-shaped so the in-Unity adapter rotates the content, and off-ratio desktop/landscape screens are letterboxed instead of cropped); `Contain` = fixed aspect + letterbox (no flip); `Cover` = fixed aspect + crop; `Stretch` = fill, ignore aspect. |
+| **Aspect Width**        | `0` (auto)     | Design aspect width for Aspect/Contain/Cover. `0` = template default (1920), independent of Player Settings. |
+| **Aspect Height**       | `0` (auto)     | Design aspect height for Aspect/Contain/Cover. `0` = template default (1080), independent of Player Settings. |
 | **Background**          | `#231F20`      | Letterbox / page background color. |
 | **Max Device Pixel Ratio** | `0` (unlimited) | Cap on `devicePixelRatio` to reduce GPU load on high-DPI mobile screens (e.g. `2`). |
 

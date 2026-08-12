@@ -31,9 +31,9 @@ namespace RSWebGLLandscape.Editor
     {
         internal const string SettingsPath = "ProjectSettings/RSWebGLTemplateSettings.asset";
 
-        public RSFitMode fitMode = RSFitMode.Aspect;
-        public int aspectWidth = 0;   // 0 = use Player Settings Default Canvas Width
-        public int aspectHeight = 0;  // 0 = use Player Settings Default Canvas Height
+        public RSFitMode fitMode = RSFitMode.Expand;
+        public int aspectWidth = 0;   // 0 = template default (1920), independent of Player Settings
+        public int aspectHeight = 0;  // 0 = template default (1080), independent of Player Settings
         public Color background = new Color(0x23 / 255f, 0x1F / 255f, 0x20 / 255f, 1f);
         public float maxDevicePixelRatio = 0f; // 0 = unlimited
 
@@ -91,9 +91,10 @@ namespace RSWebGLLandscape.Editor
 
                     s.fitMode = (RSFitMode)EditorGUILayout.EnumPopup(
                         new GUIContent("Fit Mode",
+                            "Expand = fill viewport (default). " +
                             "Aspect = keep design ratio + letterbox, auto-flipped by orientation " +
-                            "(recommended; portrait window stays portrait so the adapter rotates). " +
-                            "Expand = fill viewport. Contain = fixed aspect + letterbox. " +
+                            "(portrait window stays portrait so the adapter rotates). " +
+                            "Contain = fixed aspect + letterbox. " +
                             "Cover = fixed aspect + crop. Stretch = fill, ignore aspect."),
                         s.fitMode);
 
@@ -102,10 +103,10 @@ namespace RSWebGLLandscape.Editor
                     using (new EditorGUI.DisabledScope(!aspectUsed))
                     {
                         s.aspectWidth = Mathf.Max(0, EditorGUILayout.IntField(
-                            new GUIContent("Aspect Width", "0 = Player Settings Default Canvas Width"),
+                            new GUIContent("Aspect Width", "0 = template default (1920)"),
                             s.aspectWidth));
                         s.aspectHeight = Mathf.Max(0, EditorGUILayout.IntField(
-                            new GUIContent("Aspect Height", "0 = Player Settings Default Canvas Height"),
+                            new GUIContent("Aspect Height", "0 = template default (1080)"),
                             s.aspectHeight));
                     }
 

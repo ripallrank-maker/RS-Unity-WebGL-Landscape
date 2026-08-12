@@ -5,12 +5,14 @@
 // package's Editor code is present. If you don't have the package installed,
 // edit the values here by hand.
 //
-// fitMode: "aspect" | "expand" | "contain" | "cover" | "stretch"
-//   "aspect" (recommended): keep the design ratio, letterbox, auto-flip by
-//   orientation so the in-Unity adapter still sees portrait as portrait.
-// aspectW / aspectH: design aspect (0 = use Default Canvas size)
+// fitMode: "expand" | "aspect" | "contain" | "cover" | "stretch"
+//   "expand" (default): fill the whole viewport, no aspect kept.
+//   "aspect": keep the design ratio, letterbox, auto-flip by orientation so
+//   the in-Unity adapter still sees portrait as portrait.
+// aspectW / aspectH: design aspect, only used by aspect/contain/cover
+//   (0 = template default 1920x1080, independent of Player Settings)
 window.RSConfigOverride = {
-  fitMode: "aspect",
+  fitMode: "expand",
   aspectW: 0,
   aspectH: 0,
   background: "#231F20",

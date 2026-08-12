@@ -14,7 +14,7 @@
   <body>
     <!-- Structure/IDs kept identical to Unity's built-in template so it stays familiar. -->
     <div id="unity-container">
-      <canvas id="unity-canvas" width={{{ WIDTH }}} height={{{ HEIGHT }}} tabindex="-1"></canvas>
+      <canvas id="unity-canvas" width="1280" height="720" tabindex="-1"></canvas>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
@@ -27,32 +27,34 @@
       // ── RS WebGL Landscape template ───────────────────────────────────────
       // Based on Unity's default WebGL template. The ONLY behavioural change is
       // how the canvas is sized: instead of a fixed WIDTH x HEIGHT box, the
-      // canvas is fitted to the browser viewport according to the config below.
+      // canvas defaults to filling the browser viewport (fitMode "expand"),
+      // independent of Player Settings' Default Canvas size — this template
+      // no longer reads WIDTH/HEIGHT at all.
       //
       // Values come from window.RSConfigOverride (TemplateData/rsconfig.js),
       // which is generated on build from Project Settings > RS WebGL Landscape
-      // (real enum dropdown / color picker). If that file/values are absent, the
-      // defaults below apply. WIDTH/HEIGHT fall back to Player Settings' Default
-      // Canvas size ({{{ WIDTH }}}x{{{ HEIGHT }}}).
+      // (real enum dropdown / color picker). If that file/values are absent,
+      // the defaults below apply.
       //
       // Fit modes:
-      //   "aspect"  – KHUYẾN NGHỊ cho package này. Giữ đúng tỷ lệ thiết kế và
-      //               letterbox (viền), NHƯNG tự lật tỷ lệ theo hướng viewport:
-      //               màn ngang → canvas ngang (vd 1.6), màn dọc → canvas dọc
+      //   "expand"  – MẶC ĐỊNH. Canvas phủ kín 100% viewport (không giữ tỷ lệ,
+      //               để adapter tự lo mọi thứ). Có thể bị lòi/cắt trên màn
+      //               lệch tỷ lệ.
+      //   "aspect"  – Giữ đúng tỷ lệ thiết kế (aspectW/aspectH) và letterbox
+      //               (viền), NHƯNG tự lật tỷ lệ theo hướng viewport: màn
+      //               ngang → canvas ngang (vd 1.6), màn dọc → canvas dọc
       //               (vd 0.625). Nhờ vậy canvas dọc vẫn cao hơn rộng nên
       //               WebGLOrientationAdapter nhận diện đúng portrait và xoay
       //               nội dung; đồng thời desktop/màn ngang lệch tỷ lệ không bị
       //               cắt cạnh — chỉ cần bắt tỷ lệ ở CSS, adapter giữ nguyên.
-      //   "expand"  – canvas phủ kín 100% viewport (không giữ tỷ lệ, để adapter
-      //               tự lo mọi thứ). Có thể bị lòi/cắt trên màn lệch tỷ lệ.
       //   "contain" – giữ đúng tỷ lệ CỐ ĐỊNH (không lật), letterbox.
       //   "cover"   – giữ tỷ lệ cố định, phủ kín viewport bằng cách cắt bớt.
       //   "stretch" – kéo dãn lấp đầy, KHÔNG giữ tỷ lệ.
       var _rsOverride = (typeof window !== "undefined" && window.RSConfigOverride) ? window.RSConfigOverride : {};
       var RSConfig = {
-        fitMode:    _rsOverride.fitMode || "aspect",
-        aspectW:    (_rsOverride.aspectW > 0) ? _rsOverride.aspectW : {{{ WIDTH }}},
-        aspectH:    (_rsOverride.aspectH > 0) ? _rsOverride.aspectH : {{{ HEIGHT }}},
+        fitMode:    _rsOverride.fitMode || "expand",
+        aspectW:    (_rsOverride.aspectW > 0) ? _rsOverride.aspectW : 1920,
+        aspectH:    (_rsOverride.aspectH > 0) ? _rsOverride.aspectH : 1080,
         background: _rsOverride.background || "#231F20",
         maxDevicePixelRatio: _rsOverride.maxDevicePixelRatio || 0,
       };
