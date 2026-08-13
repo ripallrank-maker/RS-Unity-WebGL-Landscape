@@ -508,6 +508,12 @@ public class WebGLOrientationAdapter : MonoBehaviour
         {
             if (cv == null) continue;
 
+            if (debugLog)
+                Debug.Log($"[RSWebGLLandscape] AppendNewObjects found Canvas '{cv.gameObject.name}' " +
+                          $"renderMode={cv.renderMode} activeSelf={cv.gameObject.activeSelf} " +
+                          $"activeInHierarchy={cv.gameObject.activeInHierarchy} scene={cv.gameObject.scene.name} " +
+                          $"alreadyTracked={_canvases.Exists(e => e.canvas == cv)}");
+
             // World-Space canvases are rendered by the camera, so the camera
             // rotation already tilts them together with the world — no extra
             // handling needed here.
@@ -827,6 +833,12 @@ public class WebGLOrientationAdapter : MonoBehaviour
     {
         var e = _canvases[i];
         if (e.canvas == null) return;
+
+        if (debugLog)
+            Debug.Log($"[RSWebGLLandscape] ApplyPortraitToCanvas '{e.canvas.gameObject.name}' " +
+                      $"renderMode={e.canvas.renderMode} worldCamera={(e.canvas.worldCamera != null ? e.canvas.worldCamera.name : "null")} " +
+                      $"scaleMode={e.scaleMode} baseRefRes={e.baseRefRes} alreadyHasRoot={e.rotationRoot != null} " +
+                      $"directChildren={e.canvas.transform.childCount} activeSelf={e.canvas.gameObject.activeSelf}");
 
         if (e.scaler != null &&
             e.scaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
