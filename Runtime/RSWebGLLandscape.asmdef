@@ -2,8 +2,7 @@
     "name": "RSWebGLLandscape",
     "rootNamespace": "",
     "references": [
-        "UnityEngine.UI",
-        "Cinemachine"
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
